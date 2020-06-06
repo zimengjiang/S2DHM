@@ -33,7 +33,8 @@ class SparseToDensePredictor(predictor.PosePredictor):
             self._dataset.data['filename_to_local_reconstruction']
 
     def _compute_sparse_reference_hypercolumn(self, reference_image,
-                                              local_reconstruction):
+                                              local_reconstruction,
+                                              return_dense=False):
         """Compute hypercolumns at every visible 3D point reprojection."""
         reference_dense_hypercolumn, image_size = \
             self._network.compute_hypercolumn(
@@ -46,7 +47,10 @@ class SparseToDensePredictor(predictor.PosePredictor):
             keypoint_association.fast_sparse_keypoint_descriptor(
                 [local_reconstruction.points_2D.T],
                 dense_keypoints, reference_dense_hypercolumn)[0]
-        return reference_sparse_hypercolumns, cell_size
+        if return_dense:
+            return reference_sparse_hypercolumns, cell_size, reference_dense_hypercolumn
+        else:
+            return reference_sparse_hypercolumns, cell_size
 
     def run(self):
         """Run the sparse-to-dense pose predictor."""
