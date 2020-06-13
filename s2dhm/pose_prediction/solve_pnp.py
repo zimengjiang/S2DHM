@@ -2,10 +2,17 @@ import gin
 import cv2
 import numpy as np
 from collections import namedtuple
+from recordclass import recordclass
 from pose_prediction import matrix_utils
 
-Prediction = namedtuple('Prediction',
+from featurePnP.utils import from_homogeneous, to_homogeneous
+
+# Prediction = namedtuple('Prediction',
+#     'success num_matches num_inliers reference_inliers query_inliers quaternion matrix reference_filename reference_keypoints')
+# lixin: for updating field value while namedtuple is immutable
+Prediction = recordclass('Prediction',
     'success num_matches num_inliers reference_inliers query_inliers quaternion matrix reference_filename reference_keypoints')
+
 
 
 @gin.configurable
@@ -43,6 +50,12 @@ def solve_pnp(points_2D: np.ndarray,
             iterationsCount=5000,
             reprojectionError=reprojection_threshold,
             flags=cv2.SOLVEPNP_P3P)
+        matrix = matrix_utils.matrix_from_se3(tvec, rvec)
+        # lixin
+        # print("solvePnPRansac: ", len(inliers))
+        # points_3D_proj = np.round(from_homogeneous(from_homogeneous(to_homogeneous(points_3D)  @ matrix.T) @ intrinsics.T))
+        # dist = np.sum(np.square(points_2D - points_3D_proj), axis=-1)
+        # print("RANSAC initial: ", np.sum(dist < 12*12))
     else:
         return Prediction(
             success=False,
@@ -64,6 +77,10 @@ def solve_pnp(points_2D: np.ndarray,
         assert success
         matrix = matrix_utils.matrix_from_se3(tvec, rvec)
         quaternion = matrix_utils.matrix_quaternion(matrix)
+        # lixin
+        # points_3D_proj = np.round(from_homogeneous(from_homogeneous(to_homogeneous(points_3D)  @ matrix.T) @ intrinsics.T))
+        # dist = np.sum(np.square(points_2D - points_3D_proj), axis=-1)
+        # print("RANSAC refit: ", np.sum(dist < 12*12))
         return Prediction(
             success=True,
             num_matches=points_2D.shape[0],

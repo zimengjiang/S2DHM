@@ -133,7 +133,6 @@ class BaseDataset():
             A dictionary mapping reference image filenames to triangulation
             data (intrinsics matrix, distortion coefficients, 2D and 3D points)
         """
-        print(self._data['triangulation_data_file'])
         assert os.path.isfile(self._data['triangulation_data_file'])
         triangulation_data = np.load(self._data['triangulation_data_file'])
         filename_to_local_reconstruction = dict()

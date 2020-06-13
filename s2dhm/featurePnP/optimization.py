@@ -10,6 +10,8 @@ import scipy.io
 import numpy as np
 import logging
 
+from pose_prediction.matrix_utils import matrix_quaternion
+
 def optimizer_step(g, H, lambda_=0):
     """One optimization step with Gauss-Newton or Levenberg-Marquardt.
     Args:
@@ -29,13 +31,15 @@ def optimizer_step(g, H, lambda_=0):
     return delta
 
 class FeaturePnP(nn.Module):
-    def __init__(self, iterations, device, loss_fn=squared_loss, lambda_=100, verbose=False):
+    def __init__(self, iterations, device, loss_fn=squared_loss, init_lambda=0.01, verbose=False, min_lambda=1e-6, max_lambda=1e2):
         super().__init__()
         self.iterations = iterations
         self.device = device
         self.loss_fn = loss_fn
         self.verbose = verbose
-        self.lambda_ = lambda_
+        self.lambda_ = init_lambda
+        self.min_lambda = min_lambda
+        self.max_lambda = max_lambda
 
 
     def forward(self, 
@@ -47,17 +51,16 @@ class FeaturePnP(nn.Module):
                 reference_dense_hypercolumn,
                 query_intrinsics, 
                 size_ratio,
+                points_2D,
                 R_gt=None, 
                 t_gt=None):
         # TODO: take distCoeffs into account using cv2.undistortPoints
-        # TODO: understand scale here
         with torch.no_grad():
             q_matrix = torch.FloatTensor(query_prediction.matrix).to(self.device)
             q_matrix_inv = q_matrix.inverse()
             r_matrix = torch.FloatTensor(reference_prediction.matrix).to(self.device)
             r_matrix_inv = r_matrix.inverse()
 
-            # TODO: check to use inverse or not?
             # pts0 = r_matrix * 3D
             # pts1 = q_matrix * 3D
             # from pts0 to pts1: q_matrix @ r_matrix_inv
@@ -93,13 +96,17 @@ class FeaturePnP(nn.Module):
             R = R_init
             t = t_init
 
+            # TODO: understand scale here
+            # for us this should be one for all points since we have no idea which keypoint is more important
             scale = torch.ones((pts_2d_0.shape[0],)).type(torch.FloatTensor).to(self.device)
-            # TODO: add early stop for LM
             for i in range(self.iterations):
                 pts_3d_1 = pts_3d_0 @ R.T + t
                 pts_2d_1 = from_homogeneous(pts_3d_1 @ K1.T)
                 img1_idx = torch.floor(pts_2d_1 / size_ratio).type(torch.LongTensor).to(self.device)
+                # For good initialization, we don't have this issue of out of boundary keypoints
                 # TODO: use mask instead of clamp here
+                img1_idx[:, 0].clamp_(0, imgf1.shape[2]-1)
+                img1_idx[:, 1].clamp_(0, imgf1.shape[1]-1)
                 # if img1_idx.max(0)[0][0] > (imgf1.shape[2]-1):
                 #     print("x out of boundary {} {}".format(img1_idx.max(0)[0][0].item(), imgf1.shape[2]-1))
                 # if img1_idx.max(0)[0][1] > (imgf1.shape[1]-1):
@@ -109,8 +116,6 @@ class FeaturePnP(nn.Module):
                 # if img1_idx.min(0)[0][1] < 0:
                 #     print("y out of boundary {}".format(img1_idx.min(0)[0][1].item()))
 
-                img1_idx[:, 0].clamp_(0, imgf1.shape[2]-1)
-                img1_idx[:, 1].clamp_(0, imgf1.shape[1]-1)
                 # print(img1_idx.min(0)[0])
                 # img1_idx might be slightly off the boundary
                 # print(img1_idx.max(0)[0])
@@ -119,12 +124,11 @@ class FeaturePnP(nn.Module):
 
                 error = extracted_feat1 - extracted_feat0
                 cost = (error**2).sum(-1)
-                # TODO: understand what this scaled_loss is
                 cost, weights, _ = scaled_loss(cost, self.loss_fn, scale)
                 if i == 0:
                     prev_cost = cost.mean(-1)
                 if self.verbose and i % 9 == 0:
-                    print('Iter ', i, cost.mean().item())
+                    print('Iter {} loss {}'.format(i, cost.mean().item()))
 
                 # calculate gradient for LM
                 J_p_T = torch.cat([
@@ -169,6 +173,8 @@ class FeaturePnP(nn.Module):
                 new_pts_2d_1 = from_homogeneous(new_pts_3d_1 @ K1.T)
                 new_img1_idx = torch.floor(new_pts_2d_1 / size_ratio).type(torch.LongTensor).to(self.device)
                 # TODO: use mask instead of clamp here
+                new_img1_idx[:, 0].clamp_(0, imgf1.shape[2]-1)
+                new_img1_idx[:, 1].clamp_(0, imgf1.shape[1]-1)
                 # if new_img1_idx.max(0)[0][0] > (imgf1.shape[2]-1):
                 #     print("x out of boundary {} {}".format(new_img1_idx.max(0)[0][0].item(), imgf1.shape[2]-1))
                 # if new_img1_idx.max(0)[0][1] > (imgf1.shape[1]-1):
@@ -177,8 +183,6 @@ class FeaturePnP(nn.Module):
                 #     print("x out of boundary {}".format(new_img1_idx.min(0)[0][0].item()))
                 # if new_img1_idx.min(0)[0][1] < 0:
                 #     print("y out of boundary {}".format(new_img1_idx.min(0)[0][1].item()))
-                new_img1_idx[:, 0].clamp_(0, imgf1.shape[2]-1)
-                new_img1_idx[:, 1].clamp_(0, imgf1.shape[1]-1)
                 new_extracted_feat1 = (imgf1[:, new_img1_idx[:, 1], new_img1_idx[:, 0]]).transpose(0, 1)
             
 
@@ -186,8 +190,12 @@ class FeaturePnP(nn.Module):
                 new_cost = (new_error**2).sum(-1)
                 new_cost = scaled_loss(new_cost, self.loss_fn, scale)[0].mean()
 
+                if new_cost > prev_cost and lambda_ == 1e3:
+                    print("Stop at iteration {}".format(i)) 
+                    break
                 lambda_ = np.clip(lambda_ * (10 if new_cost > prev_cost else 1/10),
-                                  1e-5, 1e3)
+                                  self.min_lambda, self.max_lambda)
+
                 if new_cost > prev_cost:  # cost increased
                     continue
                 prev_cost = new_cost
@@ -195,14 +203,48 @@ class FeaturePnP(nn.Module):
 
                 if R_gt is not None and t_gt is not None:
                     if self.verbose:
-                        abs_pose = torch.zeros((4, 4), dtype=torch.float32, device=self.device)
-                        abs_pose[:3, :3] = R
-                        abs_pose[:3, 3] = t
-                        abs_pose[3, 3] = 1
-                        abs_pose = abs_pose @ r_matrix
+                        abs_pose = self.relative_to_abs_pose(R, t, r_matrix)
                         r_error, t_error = pose_error(abs_pose[:3, :3], abs_pose[:3, 3], R_gt, t_gt)
                         print('Pose error:', r_error.cpu().numpy(), t_error.cpu().numpy())
-            return R, t
+            
+            # update query prediciton's quaterion and matrix
+            self.update_prediction(
+                pts_3D = local_reconstruction.points_3D[mask],
+                # pts_2D = torch.round(pts_2d_1),
+                pts_2D = points_2D, 
+                pose = self.relative_to_abs_pose(R, t, r_matrix),
+                prediction = query_prediction,
+                reference_pts_2D = local_reconstruction.points_2D[mask],
+                query_intrinsics=K1,
+                reprojectionThres = 12.0,
+            )
+
+            # return R, t
+
+    def relative_to_abs_pose(self, R, t, r_matrix):
+        abs_pose = torch.zeros((4, 4), dtype=torch.float32, device=self.device)
+        abs_pose[:3, :3] = R
+        abs_pose[:3, 3] = t
+        abs_pose[3, 3] = 1
+        abs_pose = abs_pose @ r_matrix
+        return abs_pose
+
+
+    def update_prediction(self, pts_3D, pts_2D, pose, prediction, reference_pts_2D, query_intrinsics, reprojectionThres=12.0):
+        # points_3D_proj = np.round(from_homogeneous(from_homogeneous(to_homogeneous(points_3D)  @ prediction.matrix.T) @ local_reconstruction.intrinsics.T))
+        # pts_3D_proj = from_homogeneous(to_homogeneous(torch.from_numpy(pts_3D.astype(np.float32))).cuda() @ pose.T)
+        pts_3D_cuda = torch.from_numpy(pts_3D.astype(np.float32)).cuda()
+        pts_3D_proj = from_homogeneous(from_homogeneous(to_homogeneous(pts_3D_cuda) @ pose.T) @ query_intrinsics.T)
+        dist = torch.sum(torch.pow(pts_3D_proj - pts_2D, 2), axis=-1)
+        # print(pts_3D_proj.cpu().numpy(), pts_2D)
+        inliers = (dist < reprojectionThres * reprojectionThres).cpu().numpy()
+        prediction.num_inliers = np.sum(inliers)
+        prediction.reference_inliers = reference_pts_2D[inliers]
+        prediction.query_inliers = pts_2D[inliers]
+        prediction.quaternion = matrix_quaternion(pose.cpu().numpy()) 
+        prediction.matrix = pose.cpu().numpy()
+        return
+
 
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
