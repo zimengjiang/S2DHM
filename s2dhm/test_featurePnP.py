@@ -27,6 +27,7 @@ from pose_prediction import exhaustive_search
 from PIL import Image
 from pose_prediction import solve_pnp
 from tqdm import tqdm
+from functools import partial
 
 @gin.configurable
 def get_dataset_loader(dataset_loader_cls):
@@ -249,7 +250,16 @@ def test_cmu_images():
     fpnp_pose_error = np.zeros((num_images, top_N, 2))
     fpnp_num_inliers = np.zeros((num_images, top_N))
 
-    fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=squared_loss, init_lambda=0.01, verbose=False)
+    # fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=squared_loss, init_lambda=0.01, verbose=False)
+    # loss_fn = squared_loss
+    # out_fname = "results/sqloss_cmu_slice_2"
+    # loss_fn = partial(barron_loss, alpha=torch.zeros((1)).cuda()) # cauchy loss 
+    # out_fname = "results/cauchy_loss_cmu_slice_2"
+    loss_fn = partial(barron_loss, alpha=-2*torch.ones((1)).cuda()) # cauchy loss 
+    out_fname = "results/gm_loss_cmu_slice_2"
+    # loss_fn = huber_loss 
+    # out_fname = "results/huber_loss_cmu_slice_2"
+    fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=loss_fn, init_lambda=0.01, verbose=False)
     for i, query_image in tqdm(enumerate(dataset.data['query_image_names']), total=num_images):
         query_idx = dataset.data['query_image_names'].index(query_image)
         query_dense_hypercolumn, _ = pose_predictor._network.compute_hypercolumn([query_image], to_cpu=False, resize=True)
@@ -260,6 +270,8 @@ def test_cmu_images():
 
         local_reconstruction = \
             dataset.data['filename_to_local_reconstruction'][query_image]
+        if local_reconstruction.intrinsics is None:
+            continue
         ground_truth = solve_pnp.solve_pnp(
             points_2D=local_reconstruction.points_2D,
             points_3D=local_reconstruction.points_3D,
@@ -315,6 +327,9 @@ def test_cmu_images():
                 reference_2D_points=local_reconstruction.points_2D[mask],
                 reference_keypoints=None)
 
+            if not prediction.success:
+                continue
+
             # print(prediction.num_inliers)
             points_3D_proj = from_homogeneous(from_homogeneous(to_homogeneous(points_3D)  @ prediction.matrix.T) @ local_reconstruction.intrinsics.T)
             dist = torch.sum(torch.pow(torch.Tensor(points_2D - points_3D_proj), 2), dim=-1)
@@ -354,7 +369,6 @@ def test_cmu_images():
             # print("fpnp pose error: {:.3f} {:.3f}".format(fpnp_pose_error[i, j-1, 0], fpnp_pose_error[i, j-1, 1]))
             # print("fpnp num inliers: {:.0f} / {:.0f}".format(fpnp_num_inliers[i, j-1], len(points_3D)))
 
-    out_fname = "results/sqloss_cmu_slice_2"
     out_dict = {
         'init_num_inliers': init_num_inliers,
         'init_pose_error': init_pose_error,
