@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 from featurePnP.utils import (to_homogeneous, from_homogeneous, batched_eye_like,
-                    skew_symmetric, so3exp_map, sobel_filter)
+                    skew_symmetric, so3exp_map, sobel_filter, np_gradient_filter)
 from featurePnP.losses import scaled_loss, squared_loss, pose_error
 
 from PIL import Image
@@ -53,7 +53,8 @@ class FeaturePnP(nn.Module):
                 size_ratio,
                 points_2D,
                 R_gt=None, 
-                t_gt=None):
+                t_gt=None,
+                use_sobel=True):
         # TODO: take distCoeffs into account using cv2.undistortPoints
         with torch.no_grad():
             q_matrix = torch.FloatTensor(query_prediction.matrix).to(self.device)
@@ -71,7 +72,10 @@ class FeaturePnP(nn.Module):
             t_init = relative_matrix[:3, 3]
             imgf0 = reference_dense_hypercolumn
             imgf1 = query_dense_hypercolumn
-            imgf1_gx, imgf1_gy = sobel_filter(imgf1) 
+            if use_sobel:
+                imgf1_gx, imgf1_gy = sobel_filter(imgf1) 
+            else:
+                imgf1_gx, imgf1_gy = np_gradient_filter(imgf1) 
             imgf1_gx = imgf1_gx.squeeze()
             imgf1_gy = imgf1_gy.squeeze()
             imgf0 = imgf0.squeeze()

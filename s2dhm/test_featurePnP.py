@@ -3,7 +3,7 @@ import numpy as np
 from torch import nn
 
 from featurePnP.utils import (to_homogeneous, from_homogeneous, batched_eye_like,
-                    skew_symmetric, so3exp_map, sobel_filter)
+                    skew_symmetric, so3exp_map, sobel_filter, np_gradient_filter)
 # from featurePnP.losses import scaled_loss, squared_loss, pose_error, pose_error_np
 from featurePnP.losses import *
 from featurePnP.optimization import FeaturePnP
@@ -255,10 +255,19 @@ def test_cmu_images():
     # out_fname = "results/sqloss_cmu_slice_2"
     # loss_fn = partial(barron_loss, alpha=torch.zeros((1)).cuda()) # cauchy loss 
     # out_fname = "results/cauchy_loss_cmu_slice_2"
-    loss_fn = partial(barron_loss, alpha=-2*torch.ones((1)).cuda()) # cauchy loss 
-    out_fname = "results/gm_loss_cmu_slice_2"
+    # loss_fn = partial(barron_loss, alpha=-2*torch.ones((1)).cuda()) #  Geman-McClure loss 
+    # out_fname = "results/gm_loss_cmu_slice_2"
     # loss_fn = huber_loss 
     # out_fname = "results/huber_loss_cmu_slice_2"
+    use_sobel = False
+    loss_fn = squared_loss
+    out_fname = "results/npgradient_sqloss_cmu_slice_2"
+    # loss_fn = partial(barron_loss, alpha=torch.zeros((1)).cuda()) # cauchy loss 
+    # out_fname = "results/npgradient_cauchy_loss_cmu_slice_2"
+    # loss_fn = partial(barron_loss, alpha=-2*torch.ones((1)).cuda()) #  Geman-McClure loss 
+    # out_fname = "results/npgradient_gm_loss_cmu_slice_2"
+    # loss_fn = huber_loss 
+    # out_fname = "results/npgradient_huber_loss_cmu_slice_2"
     fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=loss_fn, init_lambda=0.01, verbose=False)
     for i, query_image in tqdm(enumerate(dataset.data['query_image_names']), total=num_images):
         query_idx = dataset.data['query_image_names'].index(query_image)
@@ -356,6 +365,7 @@ def test_cmu_images():
                 points_2D=matches_2D[mask].cuda(),
                 R_gt=R_gt, 
                 t_gt=t_gt,
+                use_sobel=use_sobel,
                 )
 
             fpnp_num_inliers[i, j-1] = prediction.num_inliers
