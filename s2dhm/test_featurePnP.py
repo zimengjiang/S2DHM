@@ -260,14 +260,14 @@ def test_cmu_images():
     # loss_fn = huber_loss 
     # out_fname = "results/huber_loss_cmu_slice_2"
     use_sobel = False
-    loss_fn = squared_loss
-    out_fname = "results/npgradient_sqloss_cmu_slice_2"
+    # loss_fn = squared_loss
+    # out_fname = "results/npgradient_sqloss_cmu_slice_2"
     # loss_fn = partial(barron_loss, alpha=torch.zeros((1)).cuda()) # cauchy loss 
     # out_fname = "results/npgradient_cauchy_loss_cmu_slice_2"
     # loss_fn = partial(barron_loss, alpha=-2*torch.ones((1)).cuda()) #  Geman-McClure loss 
     # out_fname = "results/npgradient_gm_loss_cmu_slice_2"
-    # loss_fn = huber_loss 
-    # out_fname = "results/npgradient_huber_loss_cmu_slice_2"
+    loss_fn = huber_loss 
+    out_fname = "results/npgradient_huber_loss_cmu_slice_2"
     fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=loss_fn, init_lambda=0.01, verbose=False)
     for i, query_image in tqdm(enumerate(dataset.data['query_image_names']), total=num_images):
         query_idx = dataset.data['query_image_names'].index(query_image)

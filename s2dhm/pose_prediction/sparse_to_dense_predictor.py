@@ -10,6 +10,8 @@ from pose_prediction import solve_pnp
 from pose_prediction import keypoint_association
 from pose_prediction import exhaustive_search
 from visualization import plot_correspondences
+from featurePnP.optimization import FeaturePnP
+from featurePnP.losses import huber_loss
 
 
 @gin.configurable
@@ -31,6 +33,9 @@ class SparseToDensePredictor(predictor.PosePredictor):
             self._dataset.data['filename_to_intrinsics']
         self._filename_to_local_reconstruction = \
             self._dataset.data['filename_to_local_reconstruction']
+        self._fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=huber_loss, init_lambda=0.01, verbose=False)
+        self._use_fPnP = True
+        
 
     def _compute_sparse_reference_hypercolumn(self, reference_image,
                                               local_reconstruction,
@@ -67,6 +72,7 @@ class SparseToDensePredictor(predictor.PosePredictor):
                 continue
             query_dense_hypercolumn, _ = self._network.compute_hypercolumn(
                 [query_image], to_cpu=False, resize=True)
+            query_dense_hypercolumn_copy = query_dense_hypercolumn.clone().detach()
             channels, width, height = query_dense_hypercolumn.shape[1:]
             query_dense_hypercolumn = query_dense_hypercolumn.squeeze().view(
                 (channels, -1))
@@ -78,9 +84,9 @@ class SparseToDensePredictor(predictor.PosePredictor):
                 nearest_neighbor = self._dataset.data['reference_image_names'][j]
                 local_reconstruction = \
                     self._filename_to_local_reconstruction[nearest_neighbor]
-                reference_sparse_hypercolumns, cell_size = \
+                reference_sparse_hypercolumns, cell_size, reference_dense_hypercolumns = \
                     self._compute_sparse_reference_hypercolumn(
-                        nearest_neighbor, local_reconstruction)
+                        nearest_neighbor, local_reconstruction, return_dense=True)
 
                 # Perform exhaustive search
                 matches_2D, mask = exhaustive_search.exhaustive_search(
@@ -106,6 +112,8 @@ class SparseToDensePredictor(predictor.PosePredictor):
                     reference_filename=nearest_neighbor,
                     reference_2D_points=local_reconstruction.points_2D[mask],
                     reference_keypoints=None)
+                
+
 
                 # If PnP failed, fall back to nearest-neighbor prediction
                 if not prediction.success:
@@ -114,6 +122,22 @@ class SparseToDensePredictor(predictor.PosePredictor):
                     if prediction:
                         predictions.append(prediction)
                 else:
+                    if self._use_fPnP:
+                        reference_prediction = self._nearest_neighbor_prediction(nearest_neighbor)
+                        self._fPnP(
+                            query_prediction=prediction,
+                            reference_prediction=reference_prediction,
+                            local_reconstruction=local_reconstruction,
+                            mask=mask,
+                            query_dense_hypercolumn=query_dense_hypercolumn_copy,
+                            reference_dense_hypercolumn=reference_dense_hypercolumns,
+                            query_intrinsics=local_reconstruction.intrinsics,
+                            size_ratio=cell_size[0],
+                            points_2D=matches_2D[mask].cuda(),
+                            R_gt=None,
+                            t_gt=None,
+                            use_sobel=False,
+                        )
                     predictions.append(prediction)
 
             if len(predictions):
