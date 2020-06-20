@@ -5,7 +5,9 @@ import argparse
 import logging
 import numpy as np
 from image_retrieval import rank_images
+# lixin: switch betwen gnnet and vgg
 from network import network
+# from network import vggnetwork as network
 from pose_prediction import predictor
 from datasets import base_dataset
 

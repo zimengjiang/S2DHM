@@ -12,9 +12,6 @@ from torch.nn.parallel import DataParallel
 from torch.nn.functional import interpolate
 from torchvision import models
 
-from network.gnnet_model import EmbeddingNet, GNNet
-
-
 @gin.configurable
 class ImageRetrievalModel():
     """Build the image retrieval model with intermediate feature extraction.
@@ -41,12 +38,6 @@ class ImageRetrievalModel():
         self._hypercolumn_layers = hypercolumn_layers
         self._device = device
         self._model = self._build_model()
-
-        self._feature_extractor = GNNet(EmbeddingNet())
-        self._feature_extractor.load_state_dict(torch.load("/local/home/lixxue/Downloads/0_model_best.pth.tar"))
-        self._feature_extractor.to(device)
-        self._feature_extractor.eval()
-
 
     def _build_model(self):
         """ Build image retrieval network and load pre-trained weights.
@@ -140,10 +131,14 @@ class ImageRetrievalModel():
                 resize=resize,
                 device=self._device)
             image_resolution = feature_map[0].shape[1:]
-
-            feature_maps = self._feature_extractor.get_embedding(feature_map)
-            # lixin: discard the last feature map with largest feature resolution due to memory restriction
-            feature_maps = feature_maps[:-1]
+            feature_maps, j = [], 0
+            for i, layer in enumerate(list(self._model.encoder.children())):
+                if(j==len(self._hypercolumn_layers)):
+                    break
+                if(i==self._hypercolumn_layers[j]):
+                    feature_maps.append(feature_map)
+                    j+=1
+                feature_map = layer(feature_map)
 
             # Final descriptor size (concat. intermediate features)
             final_descriptor_size = sum([x.shape[1] for x in feature_maps])
@@ -153,7 +148,7 @@ class ImageRetrievalModel():
 
             # Upsample to the largest feature map size
             start_index = 0
-            for j in range(len(feature_maps)):
+            for j in range(len(self._hypercolumn_layers)):
                 descriptor_size = feature_maps[j].shape[1]
                 upsampled_map = interpolate(
                     feature_maps[j], size=(w, h),
