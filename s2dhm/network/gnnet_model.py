@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from network.unet_parts import *
 
 class EmbeddingNet(nn.Module):
-    def __init__(self, n_channels = 3, D = 32, bilinear=False, nearest=True):
+    def __init__(self, n_channels = 3, D = 128, bilinear=False, nearest=True):
         super(EmbeddingNet, self).__init__()
         self.n_channels = n_channels
         self.D = D

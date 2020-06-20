@@ -43,7 +43,7 @@ class ImageRetrievalModel():
         self._model = self._build_model()
 
         self._feature_extractor = GNNet(EmbeddingNet())
-        self._feature_extractor.load_state_dict(torch.load("/local/home/lixxue/Downloads/0_model_best.pth.tar"))
+        self._feature_extractor.load_state_dict(torch.load("/local/home/lixxue/Downloads/128.pth.tar"))
         self._feature_extractor.to(device)
         self._feature_extractor.eval()
 
@@ -147,7 +147,7 @@ class ImageRetrievalModel():
 
             # Final descriptor size (concat. intermediate features)
             final_descriptor_size = sum([x.shape[1] for x in feature_maps])
-            b, c, w, h = feature_maps[0].shape
+            b, c, w, h = feature_maps[-1].shape
             hypercolumn = torch.zeros(
                 b, final_descriptor_size, w, h).to(self._device)
 
