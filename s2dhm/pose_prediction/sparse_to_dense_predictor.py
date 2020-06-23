@@ -34,7 +34,9 @@ class SparseToDensePredictor(predictor.PosePredictor):
         self._filename_to_local_reconstruction = \
             self._dataset.data['filename_to_local_reconstruction']
         self._fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=huber_loss, init_lambda=0.01, verbose=False)
-        self._use_fPnP = True
+        # dirty switch here
+        self._use_fPnP = False
+        # self._use_fPnP = True
         
 
     def _compute_sparse_reference_hypercolumn(self, reference_image,
@@ -123,6 +125,7 @@ class SparseToDensePredictor(predictor.PosePredictor):
                         predictions.append(prediction)
                 else:
                     if self._use_fPnP:
+                        print("using fPnP")
                         reference_prediction = self._nearest_neighbor_prediction(nearest_neighbor)
                         self._fPnP(
                             query_prediction=prediction,
