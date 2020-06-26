@@ -3,3 +3,4 @@ data
 .vscode/
 */results/*.npy
 checkpoints/gnnet/
+checkpoints/vgg/

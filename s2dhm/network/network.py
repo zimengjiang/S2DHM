@@ -43,7 +43,7 @@ class ImageRetrievalModel():
         self._model = self._build_model()
 
         self._feature_extractor = GNNet(EmbeddingNet())
-        self._feature_extractor.load_state_dict(torch.load("/local/home/lixxue/new_S2DHM/S2DHM/checkpoints/gnnet/4_ckpt.pth.tar")['model_state_dict'])
+        self._feature_extractor.load_state_dict(torch.load("/local/home/lixxue/new_S2DHM/S2DHM/checkpoints/gnnet/30_best.pth.tar")['model_state_dict'])
         self._feature_extractor.to(device)
         self._feature_extractor.eval()
 
@@ -86,6 +86,7 @@ class ImageRetrievalModel():
                 for k, v in checkpoint.items())
             checkpoint = OrderedDict((k.replace('pool.module', 'pool'), v)
                 for k, v in checkpoint.items())
+        
 
 
         model.load_state_dict(checkpoint)
