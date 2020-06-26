@@ -224,6 +224,152 @@ def bind_cmu_parameters(cmu_slice, mode):
         gin.bind_parameter('plot_correspondences.plot_image_retrieval.export_folder',
             '../logs/sparse_to_dense/nearest_neighbor/cmu/slice_{}/'.format(cmu_slice)),
 
+def test_robotcar_images():
+    robotcar_root = ""
+    device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
+    gin.parse_config_file("configs/runs/run_sparse_to_dense_on_robotcar.gin")
+    dataset = get_dataset_loader()
+    dataset.data['query_image_names'] = dataset.data['reference_image_names'][:100]
+    net = network.ImageRetrievalModel(device=device)
+    ranks = rank_images.fetch_or_compute_ranks(dataset, net).T
+
+    pose_predictor = get_pose_predictor(dataset=dataset,
+                                        network=net,
+                                        ranks=ranks,
+                                        log_images=True)
+    # print(dataset.data['query_image_names'])
+    num_images = len(dataset.data['query_image_names'])
+    top_N = 5
+    init_pose_error = np.zeros((num_images, top_N, 2))
+    init_num_inliers = np.zeros((num_images, top_N))
+    fpnp_pose_error = np.zeros((num_images, top_N, 2))
+    fpnp_num_inliers = np.zeros((num_images, top_N))
+
+    use_sobel = False
+    loss_fn = huber_loss 
+    out_fname = "results/vgg_robotcar_ckpt9"
+    fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=loss_fn, init_lambda=0.01, verbose=False)
+    for i, query_image in tqdm(enumerate(dataset.data['query_image_names']), total=num_images):
+        query_idx = dataset.data['query_image_names'].index(query_image)
+        query_dense_hypercolumn, _ = pose_predictor._network.compute_hypercolumn([query_image], to_cpu=False, resize=True)
+        channels, width, height = query_dense_hypercolumn.shape[1:]
+        query_dense_hypercolumn_copy = query_dense_hypercolumn.clone().detach()
+        query_dense_hypercolumn = query_dense_hypercolumn.squeeze().view(
+            (channels, -1))
+
+        local_reconstruction = \
+            dataset.data['filename_to_local_reconstruction'][query_image]
+        if local_reconstruction.intrinsics is None:
+            continue
+        ground_truth = solve_pnp.solve_pnp(
+            points_2D=local_reconstruction.points_2D,
+            points_3D=local_reconstruction.points_3D,
+            intrinsics=local_reconstruction.intrinsics,
+            distortion_coefficients=local_reconstruction.distortion_coefficients,
+            reference_filename=None,
+            reference_2D_points=local_reconstruction.points_2D,
+            reference_keypoints=None,
+        )
+        R_gt = torch.from_numpy(ground_truth.matrix[:3, :3].astype(np.float32)).cuda()
+        t_gt = torch.from_numpy(ground_truth.matrix[:3, 3].astype(np.float32)).cuda()
+
+        for j in range(top_N+1):
+            nn_idx = ranks[query_idx][j]
+            nearest_neighbor = dataset.data['reference_image_names'][nn_idx]
+            if nearest_neighbor == query_image:
+                assert j == 0
+                # skip the same image
+                # print("find exact the same image at rank {}".format(j))
+                continue
+            local_reconstruction = \
+                dataset.data['filename_to_local_reconstruction'][nearest_neighbor]
+            reference_sparse_hypercolumns, cell_size, reference_dense_hypercolumn = \
+                pose_predictor._compute_sparse_reference_hypercolumn(
+                nearest_neighbor, local_reconstruction, return_dense=True)
+            reference_prediction = pose_predictor._nearest_neighbor_prediction(
+                nearest_neighbor)
+
+
+            matches_2D, mask = exhaustive_search.exhaustive_search(
+                query_dense_hypercolumn,
+                reference_sparse_hypercolumns,
+                Image.open(nearest_neighbor).size[::-1],
+                [width, height],
+                cell_size)
+
+            points_2D = np.reshape(
+                matches_2D.cpu().numpy()[mask], (-1, 1, 2))
+            points_3D = np.reshape(
+                local_reconstruction.points_3D[mask], (-1, 1, 3))
+            distortion_coefficients = \
+                local_reconstruction.distortion_coefficients
+    
+            # query_intrinsics, query_distortion_coefficients = pose_predictor._filename_to_intrinsics[query_image] 
+            prediction = solve_pnp.solve_pnp(
+                points_2D=points_2D,
+                points_3D=points_3D,
+                intrinsics=local_reconstruction.intrinsics,
+                distortion_coefficients=local_reconstruction.distortion_coefficients,
+                # intrinsics=query_intrinsics,
+                # distortion_coefficients=query_distortion_coefficients,
+                reference_filename=nearest_neighbor,
+                reference_2D_points=local_reconstruction.points_2D[mask],
+                reference_keypoints=None)
+
+            if not prediction.success:
+                continue
+
+            # print(prediction.num_inliers)
+            points_3D_proj = from_homogeneous(from_homogeneous(to_homogeneous(points_3D)  @ prediction.matrix.T) @ local_reconstruction.intrinsics.T)
+            dist = torch.sum(torch.pow(torch.Tensor(points_2D - points_3D_proj), 2), dim=-1)
+            # print(torch.sum(dist < 12*12))
+            init_num_inliers[i, j-1] = torch.sum(dist < 12*12).item()
+
+            R_pred = torch.from_numpy(prediction.matrix[:3, :3].astype(np.float32)).cuda()
+            t_pred = torch.from_numpy(prediction.matrix[:3, 3].astype(np.float32)).cuda()
+
+            # print(t_gt, t_pred)
+            init_R_error, init_t_error = pose_error(R_gt, t_gt, R_pred, t_pred)
+            # print("initial pose error: ", init_R_error.item(), init_t_error.item())
+            init_pose_error[i, j-1] = init_R_error.item(), init_t_error.item()
+
+            fPnP(
+                query_prediction=prediction, 
+                reference_prediction=reference_prediction, 
+                local_reconstruction=local_reconstruction,
+                mask=mask,
+                query_dense_hypercolumn=query_dense_hypercolumn_copy, 
+                reference_dense_hypercolumn=reference_dense_hypercolumn,
+                query_intrinsics=local_reconstruction.intrinsics,
+                size_ratio=cell_size[0], 
+                points_2D=matches_2D[mask].cuda(),
+                R_gt=R_gt, 
+                t_gt=t_gt,
+                use_sobel=use_sobel,
+                )
+
+            fpnp_num_inliers[i, j-1] = prediction.num_inliers
+            R_pred = torch.from_numpy(prediction.matrix[:3, :3].astype(np.float32)).cuda()
+            t_pred = torch.from_numpy(prediction.matrix[:3, 3].astype(np.float32)).cuda()
+            fpnp_R_error, fpnp_t_error = pose_error(R_gt, t_gt, R_pred, t_pred)
+            fpnp_pose_error[i, j-1] = fpnp_R_error.item(), fpnp_t_error.item()
+
+            # print("initial pose error: {:.3f} {:.3f}".format(init_pose_error[i, j-1, 0], init_pose_error[i, j-1, 1]))
+            # print("initial num inliers: {:.0f} / {:.0f}".format(init_num_inliers[i, j-1], len(points_3D)))
+            # print("fpnp pose error: {:.3f} {:.3f}".format(fpnp_pose_error[i, j-1, 0], fpnp_pose_error[i, j-1, 1]))
+            # print("fpnp num inliers: {:.0f} / {:.0f}".format(fpnp_num_inliers[i, j-1], len(points_3D)))
+
+    out_dict = {
+        'init_num_inliers': init_num_inliers,
+        'init_pose_error': init_pose_error,
+        'fpnp_num_inliers': fpnp_num_inliers,
+        'fpnp_pose_error': fpnp_pose_error,
+    }
+    np.save(out_fname, out_dict) 
+    return
+
+    
+
 def test_cmu_images():
     cmu_root = "/local/home/lixxue/S2DHM/data/cmu_extended/"
     slice_idx = 2
@@ -266,8 +412,11 @@ def test_cmu_images():
     # out_fname = "results/npgradient_cauchy_loss_cmu_slice_2"
     # loss_fn = partial(barron_loss, alpha=-2*torch.ones((1)).cuda()) #  Geman-McClure loss 
     # out_fname = "results/npgradient_gm_loss_cmu_slice_2"
+    # loss_fn = huber_loss 
+    # out_fname = "results/npgradient_huber_loss_cmu_slice_2"
     loss_fn = huber_loss 
-    out_fname = "results/npgradient_huber_loss_cmu_slice_2"
+    # out_fname = "results/gnnet_npgradient_huber_loss_cmu_slice_2"
+    out_fname = "results/01gnnet_npgradient_huber_loss_cmu_slice_2_ckpt30"
     fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=loss_fn, init_lambda=0.01, verbose=False)
     for i, query_image in tqdm(enumerate(dataset.data['query_image_names']), total=num_images):
         query_idx = dataset.data['query_image_names'].index(query_image)
@@ -390,4 +539,5 @@ def test_cmu_images():
 
     
 if __name__ == "__main__":
-    test_cmu_images()
+    # test_cmu_images()
+    test_robotcar_images()

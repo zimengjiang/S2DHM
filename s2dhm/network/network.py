@@ -12,6 +12,8 @@ from torch.nn.parallel import DataParallel
 from torch.nn.functional import interpolate
 from torchvision import models
 
+from network.vgg import MyImageRetrievalModel 
+
 @gin.configurable
 class ImageRetrievalModel():
     """Build the image retrieval model with intermediate feature extraction.
@@ -38,6 +40,14 @@ class ImageRetrievalModel():
         self._hypercolumn_layers = hypercolumn_layers
         self._device = device
         self._model = self._build_model()
+        self._s2dmodel = MyImageRetrievalModel()
+        ckpt = torch.load("../checkpoints/vgg/9_ckpt.pth.tar")['model_state_dict']
+        ckpt = OrderedDict((k.replace('embedding_net._model', '_model'), v)
+               for k, v in ckpt.items())
+        self._s2dmodel.load_state_dict(ckpt)
+        self._s2dmodel.to(self._device)
+        self._s2dmodel.eval()
+        print("load finetuned vgg net for s2d")
 
     def _build_model(self):
         """ Build image retrieval network and load pre-trained weights.
@@ -132,13 +142,17 @@ class ImageRetrievalModel():
                 device=self._device)
             image_resolution = feature_map[0].shape[1:]
             feature_maps, j = [], 0
-            for i, layer in enumerate(list(self._model.encoder.children())):
+            # print(list(self._s2dmodel.children())[0])
+            # print(len(list(self._s2dmodel.children())[0]))
+            
+            for i, layer in enumerate(list(self._s2dmodel.children())[0]):
                 if(j==len(self._hypercolumn_layers)):
                     break
                 if(i==self._hypercolumn_layers[j]):
                     feature_maps.append(feature_map)
                     j+=1
                 feature_map = layer(feature_map)
+
 
             # Final descriptor size (concat. intermediate features)
             final_descriptor_size = sum([x.shape[1] for x in feature_maps])
