@@ -224,7 +224,7 @@ def bind_cmu_parameters(cmu_slice, mode):
         gin.bind_parameter('plot_correspondences.plot_image_retrieval.export_folder',
             '../logs/sparse_to_dense/nearest_neighbor/cmu/slice_{}/'.format(cmu_slice)),
 
-def test_robotcat_images():
+def rest_robotcar_images():
     robotcar_root = ""
     device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
     gin.parse_config_file("configs/runs/run_sparse_to_dense_on_robotcar.gin")
@@ -540,4 +540,4 @@ def test_cmu_images():
     
 if __name__ == "__main__":
     # test_cmu_images()
-    test_robotcat_images()
+    test_robotcar_images()
