@@ -2,3 +2,5 @@ data
 **/__pycache__
 .vscode/
 */results/*.npy
+checkpoints/gnnet/
+checkpoints/vgg/
