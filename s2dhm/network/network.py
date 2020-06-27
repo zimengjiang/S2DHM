@@ -132,7 +132,13 @@ class ImageRetrievalModel():
                 device=self._device)
             image_resolution = feature_map[0].shape[1:]
             feature_maps, j = [], 0
+            # print(list(self._model.encoder.module.children()))
+            # print(len(list(self._model.encoder.module.children())))
+
+            # for single gpu
             for i, layer in enumerate(list(self._model.encoder.children())):
+            # for multiple gpus
+            # for i, layer in enumerate(list(self._model.encoder.module.children())):
                 if(j==len(self._hypercolumn_layers)):
                     break
                 if(i==self._hypercolumn_layers[j]):
