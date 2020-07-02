@@ -247,7 +247,7 @@ def test_robotcar_images():
 
     use_sobel = False
     loss_fn = huber_loss 
-    out_fname = "results/vgg_robotcar_ckpt9"
+    out_fname = "results/vgg_urban_1e-5_0.5"
     fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=loss_fn, init_lambda=0.01, verbose=False)
     for i, query_image in tqdm(enumerate(dataset.data['query_image_names']), total=num_images):
         query_idx = dataset.data['query_image_names'].index(query_image)
@@ -380,7 +380,8 @@ def test_cmu_images():
     # query_image = dataset.data['reference_image_names'][4]
     # print(query_image)
     # dataset.data['query_image_names'] = [query_image]
-    dataset.data['query_image_names'] = dataset.data['reference_image_names']
+    # dataset.data['query_image_names'] = dataset.data['reference_image_names']
+    dataset.data['query_image_names'] = dataset.data['reference_image_names'][:100]
     net = network.ImageRetrievalModel(device=device)
     ranks = rank_images.fetch_or_compute_ranks(dataset, net).T
 
@@ -396,27 +397,9 @@ def test_cmu_images():
     fpnp_pose_error = np.zeros((num_images, top_N, 2))
     fpnp_num_inliers = np.zeros((num_images, top_N))
 
-    # fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=squared_loss, init_lambda=0.01, verbose=False)
-    # loss_fn = squared_loss
-    # out_fname = "results/sqloss_cmu_slice_2"
-    # loss_fn = partial(barron_loss, alpha=torch.zeros((1)).cuda()) # cauchy loss 
-    # out_fname = "results/cauchy_loss_cmu_slice_2"
-    # loss_fn = partial(barron_loss, alpha=-2*torch.ones((1)).cuda()) #  Geman-McClure loss 
-    # out_fname = "results/gm_loss_cmu_slice_2"
-    # loss_fn = huber_loss 
-    # out_fname = "results/huber_loss_cmu_slice_2"
     use_sobel = False
-    # loss_fn = squared_loss
-    # out_fname = "results/npgradient_sqloss_cmu_slice_2"
-    # loss_fn = partial(barron_loss, alpha=torch.zeros((1)).cuda()) # cauchy loss 
-    # out_fname = "results/npgradient_cauchy_loss_cmu_slice_2"
-    # loss_fn = partial(barron_loss, alpha=-2*torch.ones((1)).cuda()) #  Geman-McClure loss 
-    # out_fname = "results/npgradient_gm_loss_cmu_slice_2"
-    # loss_fn = huber_loss 
-    # out_fname = "results/npgradient_huber_loss_cmu_slice_2"
     loss_fn = huber_loss 
-    # out_fname = "results/gnnet_npgradient_huber_loss_cmu_slice_2"
-    out_fname = "results/01gnnet_npgradient_huber_loss_cmu_slice_2_ckpt30"
+    out_fname = "results/vgg_1e-4_0.5_ep10"
     fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=loss_fn, init_lambda=0.01, verbose=False)
     for i, query_image in tqdm(enumerate(dataset.data['query_image_names']), total=num_images):
         query_idx = dataset.data['query_image_names'].index(query_image)
@@ -539,5 +522,5 @@ def test_cmu_images():
 
     
 if __name__ == "__main__":
-    # test_cmu_images()
-    test_robotcar_images()
+    test_cmu_images()
+    # test_robotcar_images()
