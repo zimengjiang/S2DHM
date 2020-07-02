@@ -62,6 +62,7 @@ class SparseToDensePredictor(predictor.PosePredictor):
 
         print('>> Generating pose predictions using sparse-to-dense matching...')
         output = []
+        rpnp_output = []
         tqdm_bar = tqdm(enumerate(self._ranks.T), total=self._ranks.shape[1],
                         unit='images', leave=True)
         for i, rank in tqdm_bar:
@@ -77,6 +78,7 @@ class SparseToDensePredictor(predictor.PosePredictor):
             query_dense_hypercolumn = query_dense_hypercolumn.squeeze().view(
                 (channels, -1))
             predictions = []
+            rpnp_predictions = []
 
             for j in rank[:self._top_N]:
 
@@ -120,8 +122,10 @@ class SparseToDensePredictor(predictor.PosePredictor):
                     prediction = self._nearest_neighbor_prediction(
                         nearest_neighbor)
                     if prediction:
+                        rpnp_predictions.append(prediction)
                         predictions.append(prediction)
                 else:
+                    rpnp_predictions.append(prediction[:])
                     if self._use_fPnP:
                         reference_prediction = self._nearest_neighbor_prediction(nearest_neighbor)
                         self._fPnP(
@@ -141,8 +145,12 @@ class SparseToDensePredictor(predictor.PosePredictor):
                     predictions.append(prediction)
 
             if len(predictions):
+                # print([p.num_inliers for p in rpnp_predictions])
+                # print([p.num_inliers for p in predictions])
                 export, best_prediction = self._choose_best_prediction(
                     predictions, query_image)
+                rpnp_export, rpnp_best_prediction = self._choose_best_prediction(
+                    rpnp_predictions, query_image)
                 if self._log_images:
                     if np.ndim(np.squeeze(best_prediction.query_inliers)):
                         self._plot_inliers(
@@ -162,11 +170,18 @@ class SparseToDensePredictor(predictor.PosePredictor):
                         title='Best match',
                         export_filename=self._dataset.output_converter(query_image))
 
+                # print(rpnp_export)
+                # print(export)
+                rpnp_output.append(rpnp_export)
                 output.append(export)
                 tqdm_bar.set_description(
                     "[{} inliers]".format(best_prediction.num_inliers))
                 tqdm_bar.refresh()
 
+        print('>> Saving rpnp predictions under {}'.format(self._output_filename+'_rpnp'))
+        Path(self._output_filename+'_rpnp').parent.mkdir(exist_ok=True, parents=True)
+        df = pd.DataFrame(np.array(predictions))
+        df.to_csv(self._output_filename+'_rpnp', sep=' ', header=None, index=None)
         return output
 
     @property

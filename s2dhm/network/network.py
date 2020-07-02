@@ -41,7 +41,7 @@ class ImageRetrievalModel():
         self._device = device
         self._model = self._build_model()
         self._s2dmodel = MyImageRetrievalModel()
-        ckpt = torch.load("../checkpoints/vgg/urban_1e-4_0.5/9_ckpt.pth.tar")['model_state_dict']
+        ckpt = torch.load("../checkpoints/robotcar/ckpt0_unormalize_gnloss_1e-7_gnloss11_gnlambda01_marginpos01.pth.tar")['model_state_dict']
         ckpt = OrderedDict((k.replace('embedding_net._model', '_model'), v)
                for k, v in ckpt.items())
         self._s2dmodel.load_state_dict(ckpt)

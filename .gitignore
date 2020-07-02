@@ -4,3 +4,4 @@ data
 */results/*.npy
 checkpoints/gnnet/
 checkpoints/vgg/
+checkpoints/robotcar/
