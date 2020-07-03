@@ -137,10 +137,10 @@ def bilinear_interpolation(grid, idx):
     _, H, W = grid.shape
     x = idx[..., 0]
     y = idx[..., 1]
-    x0 = torch.clamp(torch.floor(x), 0, W)
-    y0 = torch.clamp(torch.floor(y), 0, H)
-    x1 = torch.clamp(torch.ceil(x), 0, W)
-    y1 = torch.clamp(torch.ceil(y), 0, H)
+    x0 = torch.clamp(torch.floor(x), 0, W-1)
+    y0 = torch.clamp(torch.floor(y), 0, H-1)
+    x1 = torch.clamp(torch.ceil(x), 0, W-1)
+    y1 = torch.clamp(torch.ceil(y), 0, H-1)
     weight00 = (x1 - x) * (y1 - y)
     weight01 = (x1 - x) * (y - y0)
     weight10 = (x - x0) * (y1 - y)

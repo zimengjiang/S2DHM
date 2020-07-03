@@ -2,7 +2,7 @@ import torch
 from torch import nn
 
 from featurePnP.utils import (to_homogeneous, from_homogeneous, batched_eye_like,
-                    skew_symmetric, so3exp_map, sobel_filter, np_gradient_filter)
+                    skew_symmetric, so3exp_map, sobel_filter, np_gradient_filter, bilinear_interpolation)
 from featurePnP.losses import scaled_loss, squared_loss, pose_error
 
 from PIL import Image
@@ -86,45 +86,35 @@ class FeaturePnP(nn.Module):
 
             lambda_ = self.lambda_
 
-            # already in screen coordinates
+            # already in pixel coordinates
             pts_2d_0 = torch.FloatTensor(local_reconstruction.points_2D[mask]).to(self.device) # N x 2  
-            img0_idx = torch.floor(pts_2d_0 / size_ratio).type(torch.LongTensor)
-            extracted_feat0 = (imgf0[:, img0_idx[:, 1], img0_idx[:, 0]]).transpose(0, 1)
+            # img0_idx = torch.floor(pts_2d_0 / size_ratio).type(torch.LongTensor)
+            # use bilinear interpolation instead of floor
+            img0_idx = (pts_2d_0 / size_ratio)
+            # extracted_feat0 = (imgf0[:, img0_idx[:, 1], img0_idx[:, 0]]).transpose(0, 1)
+            extracted_feat0 = bilinear_interpolation(imgf0, img0_idx).transpose(0, 1)
 
             # pts_3d_0 = to_homogeneous(local_reconstruction.points_3D[mask]) @ r_matrix_inv.T
             pts_3d_0 = from_homogeneous(
-                to_homogeneous(
-                torch.FloatTensor(local_reconstruction.points_3D[mask])).to(self.device) 
+                to_homogeneous(torch.FloatTensor(local_reconstruction.points_3D[mask])).to(self.device) 
                 @ r_matrix.T)
 
             R = R_init
             t = t_init
 
-            # TODO: understand scale here
             # for us this should be one for all points since we have no idea which keypoint is more important
             scale = torch.ones((pts_2d_0.shape[0],)).type(torch.FloatTensor).to(self.device)
             for i in range(self.iterations):
                 pts_3d_1 = pts_3d_0 @ R.T + t
                 pts_2d_1 = from_homogeneous(pts_3d_1 @ K1.T)
-                img1_idx = torch.floor(pts_2d_1 / size_ratio).type(torch.LongTensor).to(self.device)
+                # img1_idx = torch.floor(pts_2d_1 / size_ratio).type(torch.LongTensor).to(self.device)
+                img1_idx = pts_2d_1 / size_ratio
+                # img1_idx might be slightly off the boundary
                 # For good initialization, we don't have this issue of out of boundary keypoints
-                # TODO: use mask instead of clamp here
                 img1_idx[:, 0].clamp_(0, imgf1.shape[2]-1)
                 img1_idx[:, 1].clamp_(0, imgf1.shape[1]-1)
-                # if img1_idx.max(0)[0][0] > (imgf1.shape[2]-1):
-                #     print("x out of boundary {} {}".format(img1_idx.max(0)[0][0].item(), imgf1.shape[2]-1))
-                # if img1_idx.max(0)[0][1] > (imgf1.shape[1]-1):
-                #     print("y out of boundary {} {}".format(img1_idx.max(0)[0][1].item(), imgf1.shape[1]-1))
-                # if img1_idx.min(0)[0][0] < 0:
-                #     print("x out of boundary {}".format(img1_idx.min(0)[0][0].item()))
-                # if img1_idx.min(0)[0][1] < 0:
-                #     print("y out of boundary {}".format(img1_idx.min(0)[0][1].item()))
-
-                # print(img1_idx.min(0)[0])
-                # img1_idx might be slightly off the boundary
-                # print(img1_idx.max(0)[0])
-                # print(imgf1.shape)
-                extracted_feat1 = (imgf1[:, img1_idx[:, 1], img1_idx[:, 0]]).transpose(0, 1)
+                # extracted_feat1 = (imgf1[:, img1_idx[:, 1], img1_idx[:, 0]]).transpose(0, 1)
+                extracted_feat1 = bilinear_interpolation(imgf1, img1_idx).transpose(0, 1)
 
                 error = extracted_feat1 - extracted_feat0
                 cost = (error**2).sum(-1)
@@ -141,17 +131,17 @@ class FeaturePnP(nn.Module):
 
                 shape = pts_3d_1.shape[:-1]
                 o, z = pts_3d_1.new_ones(shape), pts_3d_1.new_zeros(shape)
-
                 fx = K1[0, 0]
                 fy = K1[1, 1]
-
                 J_h_p = torch.stack([
                     o*fx,   z,      -fx*pts_3d_1[..., 0] / pts_3d_1[..., 2],
                     z,      o*fy,   -fy*pts_3d_1[..., 1] / pts_3d_1[..., 2],
                 ], dim=-1).reshape(shape+(2, 3)) / pts_3d_1[..., 2, None, None] / size_ratio
 
-                J_e_hx = (imgf1_gx[:, img1_idx[:, 1], img1_idx[:, 0]]).transpose(0, 1)
-                J_e_hy = (imgf1_gy[:, img1_idx[:, 1], img1_idx[:, 0]]).transpose(0, 1)
+                # J_e_hx = (imgf1_gx[:, img1_idx[:, 1], img1_idx[:, 0]]).transpose(0, 1)
+                # J_e_hy = (imgf1_gy[:, img1_idx[:, 1], img1_idx[:, 0]]).transpose(0, 1)
+                J_e_hx = bilinear_interpolation(img1gx, img1_idx).transpose(0, 1)
+                J_e_hy = bilinear_interpolation(img1gy, img1_idx).transpose(0, 1)
                 J_e_h = torch.stack([J_e_hx, J_e_hy], dim=-1)
                 J_e_T = J_e_h @ J_h_p @ J_p_T
 
@@ -161,7 +151,6 @@ class FeaturePnP(nn.Module):
                 J = J_e_T
                 Hess = torch.einsum('...ijk,...ijl->...ikl', J, J)
                 Hess = weights[..., None, None] * Hess
-                # Hess = weights[..., None]  * Hess
                 Hess = Hess.sum(-3)  # Hess was ... x N x 6 x 6
 
                 delta = optimizer_step(Grad, Hess, lambda_)
@@ -175,26 +164,18 @@ class FeaturePnP(nn.Module):
 
                 new_pts_3d_1 = pts_3d_0 @ R_new.T + t_new
                 new_pts_2d_1 = from_homogeneous(new_pts_3d_1 @ K1.T)
-                new_img1_idx = torch.floor(new_pts_2d_1 / size_ratio).type(torch.LongTensor).to(self.device)
-                # TODO: use mask instead of clamp here
+                # new_img1_idx = torch.floor(new_pts_2d_1 / size_ratio).type(torch.LongTensor).to(self.device)
+                new_img1_idx = new_pts_2d1 / size_ratio
                 new_img1_idx[:, 0].clamp_(0, imgf1.shape[2]-1)
                 new_img1_idx[:, 1].clamp_(0, imgf1.shape[1]-1)
-                # if new_img1_idx.max(0)[0][0] > (imgf1.shape[2]-1):
-                #     print("x out of boundary {} {}".format(new_img1_idx.max(0)[0][0].item(), imgf1.shape[2]-1))
-                # if new_img1_idx.max(0)[0][1] > (imgf1.shape[1]-1):
-                #     print("y out of boundary {} {}".format(new_img1_idx.max(0)[0][1].item(), imgf1.shape[1]-1))
-                # if new_img1_idx.min(0)[0][0] < 0:
-                #     print("x out of boundary {}".format(new_img1_idx.min(0)[0][0].item()))
-                # if new_img1_idx.min(0)[0][1] < 0:
-                #     print("y out of boundary {}".format(new_img1_idx.min(0)[0][1].item()))
-                new_extracted_feat1 = (imgf1[:, new_img1_idx[:, 1], new_img1_idx[:, 0]]).transpose(0, 1)
-            
+                # new_extracted_feat1 = (imgf1[:, new_img1_idx[:, 1], new_img1_idx[:, 0]]).transpose(0, 1)
+                new_extracted_feat1 = bilinear_interpolation(imgf1, new_img1_idx).transpose(0, 1)
 
                 new_error = new_extracted_feat1 - extracted_feat0 
                 new_cost = (new_error**2).sum(-1)
                 new_cost = scaled_loss(new_cost, self.loss_fn, scale)[0].mean()
 
-                if new_cost > prev_cost and lambda_ == 1e3:
+                if new_cost > prev_cost and lambda_ == self.max_lambda:
                     print("Stop at iteration {}".format(i)) 
                     break
                 lambda_ = np.clip(lambda_ * (10 if new_cost > prev_cost else 1/10),
@@ -202,6 +183,8 @@ class FeaturePnP(nn.Module):
 
                 if new_cost > prev_cost:  # cost increased
                     continue
+                
+                best_pts_2d_1 = new_pts_2d_1
                 prev_cost = new_cost
                 R, t = R_new, t_new
 
@@ -215,11 +198,14 @@ class FeaturePnP(nn.Module):
             self.update_prediction(
                 pts_3D = local_reconstruction.points_3D[mask],
                 # pts_2D = torch.round(pts_2d_1),
-                pts_2D = points_2D, 
+                # pts_2D = points_2D, 
+                # bug fix: here should use updated 2d keypoints in the query image
+                # pts_2D = torch.round(best_pts_2d_1).type(torch.LongTensor).cpu().numpy(),
+                pts_2D = torch.round(best_pts_2d_1),
                 pose = self.relative_to_abs_pose(R, t, r_matrix),
                 prediction = query_prediction,
                 reference_pts_2D = local_reconstruction.points_2D[mask],
-                query_intrinsics=K1,
+                query_intrinsics = K1,
                 reprojectionThres = 12.0,
             )
 
