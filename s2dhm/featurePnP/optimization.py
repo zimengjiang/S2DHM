@@ -107,6 +107,8 @@ class FeaturePnP(nn.Module):
             for i in range(self.iterations):
                 pts_3d_1 = pts_3d_0 @ R.T + t
                 pts_2d_1 = from_homogeneous(pts_3d_1 @ K1.T)
+                if i == 0:
+                    best_pts_2d_1 = pts_2d_1
                 # img1_idx = torch.floor(pts_2d_1 / size_ratio).type(torch.LongTensor).to(self.device)
                 img1_idx = pts_2d_1 / size_ratio
                 # img1_idx might be slightly off the boundary
@@ -140,8 +142,8 @@ class FeaturePnP(nn.Module):
 
                 # J_e_hx = (imgf1_gx[:, img1_idx[:, 1], img1_idx[:, 0]]).transpose(0, 1)
                 # J_e_hy = (imgf1_gy[:, img1_idx[:, 1], img1_idx[:, 0]]).transpose(0, 1)
-                J_e_hx = bilinear_interpolation(img1gx, img1_idx).transpose(0, 1)
-                J_e_hy = bilinear_interpolation(img1gy, img1_idx).transpose(0, 1)
+                J_e_hx = bilinear_interpolation(imgf1_gx, img1_idx).transpose(0, 1)
+                J_e_hy = bilinear_interpolation(imgf1_gy, img1_idx).transpose(0, 1)
                 J_e_h = torch.stack([J_e_hx, J_e_hy], dim=-1)
                 J_e_T = J_e_h @ J_h_p @ J_p_T
 
@@ -165,7 +167,7 @@ class FeaturePnP(nn.Module):
                 new_pts_3d_1 = pts_3d_0 @ R_new.T + t_new
                 new_pts_2d_1 = from_homogeneous(new_pts_3d_1 @ K1.T)
                 # new_img1_idx = torch.floor(new_pts_2d_1 / size_ratio).type(torch.LongTensor).to(self.device)
-                new_img1_idx = new_pts_2d1 / size_ratio
+                new_img1_idx = new_pts_2d_1 / size_ratio
                 new_img1_idx[:, 0].clamp_(0, imgf1.shape[2]-1)
                 new_img1_idx[:, 1].clamp_(0, imgf1.shape[1]-1)
                 # new_extracted_feat1 = (imgf1[:, new_img1_idx[:, 1], new_img1_idx[:, 0]]).transpose(0, 1)
@@ -176,7 +178,7 @@ class FeaturePnP(nn.Module):
                 new_cost = scaled_loss(new_cost, self.loss_fn, scale)[0].mean()
 
                 if new_cost > prev_cost and lambda_ == self.max_lambda:
-                    print("Stop at iteration {}".format(i)) 
+                    # print("Stop at iteration {}".format(i)) 
                     break
                 lambda_ = np.clip(lambda_ * (10 if new_cost > prev_cost else 1/10),
                                   self.min_lambda, self.max_lambda)
