@@ -4,7 +4,7 @@ import pose_prediction.solve_pnp
 
 get_pose_predictor.pose_predictor_cls = @SparseToDensePredictor
 # SparseToDensePredictor.top_N = 30
-SparseToDensePredictor.top_N = 5
+SparseToDensePredictor.top_N = 30
 
 # PnP Parameters
 solve_pnp.reprojection_threshold = 12.0

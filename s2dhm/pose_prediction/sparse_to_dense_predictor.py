@@ -5,6 +5,9 @@ import torch
 import numpy as np
 from PIL import Image
 from tqdm import tqdm
+import pandas as pd
+from pathlib import Path
+
 from pose_prediction import predictor
 from pose_prediction import solve_pnp
 from pose_prediction import keypoint_association
@@ -148,8 +151,6 @@ class SparseToDensePredictor(predictor.PosePredictor):
                     predictions.append(prediction)
 
             if len(predictions):
-                # print([p.num_inliers for p in rpnp_predictions])
-                # print([p.num_inliers for p in predictions])
                 export, best_prediction = self._choose_best_prediction(
                     predictions, query_image)
                 rpnp_export, rpnp_best_prediction = self._choose_best_prediction(

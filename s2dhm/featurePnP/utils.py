@@ -134,6 +134,7 @@ def so3exp_map(w):
 def bilinear_interpolation(grid, idx):
     # grid: C x H x W
     # idx: N x 2
+    # return C x N
     _, H, W = grid.shape
     x = idx[..., 0]
     y = idx[..., 1]
@@ -153,10 +154,6 @@ def bilinear_interpolation(grid, idx):
     grid01 = grid[..., y0, x1]
     grid10 = grid[..., y1, x0]
     grid11 = grid[..., y1, x1]
-    # print(weight00)
-    # print(weight01)
-    # print(weight10)
-    # print(weight11)
 
     return weight00*grid00 + weight01*grid01 + weight10*grid10 + weight11*grid11
 
@@ -166,8 +163,13 @@ def sobel_filter(f):
     b, c, h, w = f.shape
     sobel_y = torch.FloatTensor([[-1., -2., -1.], [0., 0., 0.], [1., 2., 1.]]).view(1, 1, 3, 3).to(f)
     sobel_x = torch.FloatTensor([[-1., 0., 1.], [-2., 0., 2.], [-1., 0., 1.]]).view(1, 1, 3, 3).to(f)
-    f_gradx = F.conv2d(f.view(-1, 1, h, w), sobel_x, stride=1, padding=1).view(b, c, h, w)
-    f_grady = F.conv2d(f.view(-1, 1, h, w), sobel_y, stride=1, padding=1).view(b, c, h, w)
+    padded_f = F.pad(f, (1, 1, 1, 1), mode='replicate').view(-1, 1, h+2, w+2)
+    padded_f[:, :, 0, :] += padded_f[:, :, 1, :] -padded_f[:, :, 2, :] 
+    padded_f[:, :, -1, :] -= padded_f[:, :, -3, :] -padded_f[:, :, -2, :] 
+    padded_f[:, :, :, 0] += padded_f[:, :, :, 1] -padded_f[:, :, :, 2] 
+    padded_f[:, :, :, -1] -= padded_f[:, :, :, -3] -padded_f[:, :, :, -2]
+    f_gradx = F.conv2d(padded_f, sobel_x, stride=1, padding=0).view(b, c, h, w)
+    f_grady = F.conv2d(padded_f, sobel_y, stride=1, padding=0).view(b, c, h, w)
     return f_gradx, f_grady
 
 def np_gradient_filter(f):
@@ -176,19 +178,33 @@ def np_gradient_filter(f):
     b, c, h, w = f.shape
     np_gradient_y = torch.FloatTensor([[0., -0.5, 0.], [0., 0., 0.], [0., 0.5, 0.]]).view(1, 1, 3, 3).to(f)
     np_gradient_x = torch.FloatTensor([[0., 0., 0], [-0.5, 0., 0.5], [0., 0., 0]]).view(1, 1, 3, 3).to(f)
-    f_gradx = F.conv2d(f.view(-1, 1, h, w), np_gradient_x, stride=1, padding=1).view(b, c, h, w)
-    f_grady = F.conv2d(f.view(-1, 1, h, w), np_gradient_y, stride=1, padding=1).view(b, c, h, w)
+    # np_gradient_y = torch.FloatTensor([[0., -0.5, 0.], [0., 1., 0.], [0., -0.5, 0.]]).view(1, 1, 3, 3).to(f)
+    # np_gradient_x = torch.FloatTensor([[0., 0., 0], [-0.5, 1, -0.5], [0., 0., 0]]).view(1, 1, 3, 3).to(f)
+    padded_f = F.pad(f, (1, 1, 1, 1), mode='replicate').view(-1, 1, h+2, w+2)
+    padded_f[:, :, 0, :] += padded_f[:, :, 1, :] -padded_f[:, :, 2, :] 
+    padded_f[:, :, -1, :] -= padded_f[:, :, -3, :] -padded_f[:, :, -2, :] 
+    padded_f[:, :, :, 0] += padded_f[:, :, :, 1] -padded_f[:, :, :, 2] 
+    padded_f[:, :, :, -1] -= padded_f[:, :, :, -3] -padded_f[:, :, :, -2] 
+    # print(padded_f)
+    f_gradx = F.conv2d(padded_f, np_gradient_x, stride=1, padding=0).view(b, c, h, w)
+    f_grady = F.conv2d(padded_f, np_gradient_y, stride=1, padding=0).view(b, c, h, w)
     return f_gradx, f_grady
 
 
 
-# if __name__ == "__main__":
-#     a = torch.ones((1, 2, 2))
-#     a[:, 0, 1] = 2
-#     a[:, 1, 0] = 3
-#     a[:, 1, 1] = 4
-# 
-#     idx = torch.from_numpy(np.random.rand(4,2))
-#     print(idx)
-# 
-#     print(bilinear_interpolation(a, idx))
+if __name__ == "__main__":
+    # a = torch.ones((1, 2, 2))
+    # a[:, 0, 1] = 2
+    # a[:, 1, 0] = 3
+    # a[:, 1, 1] = 4
+
+    # idx = torch.from_numpy(np.random.rand(4,2))
+    # print(idx)
+
+    # print(bilinear_interpolation(a, idx))
+    
+    a = torch.FloatTensor([[1, 2, 6], [3, 4, 5]]).reshape((1, 1, 2, 3))
+
+    grad_x, grad_y = np_gradient_filter(a)
+    print(grad_y)
+    print(grad_x)
