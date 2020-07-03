@@ -111,6 +111,7 @@ class SparseToDensePredictor(predictor.PosePredictor):
                 # distortion_coefficients = \
                 #     local_reconstruction.distortion_coefficients
                 intrinsics, distortion_coefficients = self._filename_to_intrinsics[query_image]
+                assert np.allclose(distortion_coefficients, 0)
                 prediction = solve_pnp.solve_pnp(
                     points_2D=points_2D,
                     points_3D=points_3D,
