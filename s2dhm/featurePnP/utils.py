@@ -158,8 +158,7 @@ def bilinear_interpolation(grid, idx):
     return weight00*grid00 + weight01*grid01 + weight10*grid10 + weight11*grid11
 
 def sobel_filter(f):
-    # f: BxCxHxW
-
+    # f, f_gradx, f_grady: BxCxHxW
     b, c, h, w = f.shape
     sobel_y = torch.FloatTensor([[-1., -2., -1.], [0., 0., 0.], [1., 2., 1.]]).view(1, 1, 3, 3).to(f)
     sobel_x = torch.FloatTensor([[-1., 0., 1.], [-2., 0., 2.], [-1., 0., 1.]]).view(1, 1, 3, 3).to(f)
@@ -173,19 +172,15 @@ def sobel_filter(f):
     return f_gradx, f_grady
 
 def np_gradient_filter(f):
-    # f: BxCxHxW
-
+    # f, f_gradx, f_grady: BxCxHxW
     b, c, h, w = f.shape
     np_gradient_y = torch.FloatTensor([[0., -0.5, 0.], [0., 0., 0.], [0., 0.5, 0.]]).view(1, 1, 3, 3).to(f)
     np_gradient_x = torch.FloatTensor([[0., 0., 0], [-0.5, 0., 0.5], [0., 0., 0]]).view(1, 1, 3, 3).to(f)
-    # np_gradient_y = torch.FloatTensor([[0., -0.5, 0.], [0., 1., 0.], [0., -0.5, 0.]]).view(1, 1, 3, 3).to(f)
-    # np_gradient_x = torch.FloatTensor([[0., 0., 0], [-0.5, 1, -0.5], [0., 0., 0]]).view(1, 1, 3, 3).to(f)
     padded_f = F.pad(f, (1, 1, 1, 1), mode='replicate').view(-1, 1, h+2, w+2)
     padded_f[:, :, 0, :] += padded_f[:, :, 1, :] -padded_f[:, :, 2, :] 
     padded_f[:, :, -1, :] -= padded_f[:, :, -3, :] -padded_f[:, :, -2, :] 
     padded_f[:, :, :, 0] += padded_f[:, :, :, 1] -padded_f[:, :, :, 2] 
     padded_f[:, :, :, -1] -= padded_f[:, :, :, -3] -padded_f[:, :, :, -2] 
-    # print(padded_f)
     f_gradx = F.conv2d(padded_f, np_gradient_x, stride=1, padding=0).view(b, c, h, w)
     f_grady = F.conv2d(padded_f, np_gradient_y, stride=1, padding=0).view(b, c, h, w)
     return f_gradx, f_grady
