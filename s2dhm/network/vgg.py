@@ -12,7 +12,7 @@ from torch.nn.parallel import DataParallel
 from torch.nn.functional import interpolate
 from torchvision import models
 
-class MyImageRetrievalModel(nn.Module):
+class VGG16FeatureMap(nn.Module):
     """Build the image retrieval model with intermediate feature extraction.
 
     The model is made of a VGG-16 backbone combined with a NetVLAD pooling
@@ -27,7 +27,7 @@ class MyImageRetrievalModel(nn.Module):
                 the intermediate features.
             device: The pytorch device to run on.
         """
-        super(MyImageRetrievalModel, self).__init__()
+        super(VGG16FeatureMap, self).__init__()
         self._hypercolumn_layers = [14, 17, 21, 24, 28]
         encoder = models.vgg16(pretrained=False)
         layers = list(encoder.features.children())[:-2]

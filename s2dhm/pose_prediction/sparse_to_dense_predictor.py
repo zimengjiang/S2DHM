@@ -103,11 +103,11 @@ class SparseToDensePredictor(predictor.PosePredictor):
                     matches_2D.cpu().numpy()[mask], (-1, 1, 2))
                 points_3D = np.reshape(
                     local_reconstruction.points_3D[mask], (-1, 1, 3))
-                distortion_coefficients = \
-                    local_reconstruction.distortion_coefficients
                 # bug in the original repo: should use query image's intrinsics
                 # intrinsics = local_reconstruction.intrinsics
-                intrinsics = self._filename_to_intrinsics[query_image]
+                # distortion_coefficients = \
+                #     local_reconstruction.distortion_coefficients
+                intrinsics, distortion_coefficients = self._filename_to_intrinsics[query_image]
                 prediction = solve_pnp.solve_pnp(
                     points_2D=points_2D,
                     points_3D=points_3D,

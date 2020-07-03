@@ -12,7 +12,7 @@ from torch.nn.parallel import DataParallel
 from torch.nn.functional import interpolate
 from torchvision import models
 
-from network.vgg import MyImageRetrievalModel 
+from network.vgg import VGG16FeatureMap 
 
 @gin.configurable
 class ImageRetrievalModel():
@@ -22,7 +22,8 @@ class ImageRetrievalModel():
     layer.
     """
     def __init__(self, num_clusters: int, encoder_dim: int,
-                checkpoint_path: str, hypercolumn_layers: List[int], device):
+                checkpoint_path: str, hypercolumn_layers: List[int], device,
+                vgg16fmap_ckpt: str="../checkpoints/robotcar/ckpt0_unormalize_gnloss_1e-7_gnloss11_gnlambda01_marginpos01.pth.tar"):
         """Initialize the Image Retrieval Network.
 
         Args:
@@ -40,13 +41,13 @@ class ImageRetrievalModel():
         self._hypercolumn_layers = hypercolumn_layers
         self._device = device
         self._model = self._build_model()
-        self._s2dmodel = MyImageRetrievalModel()
-        ckpt = torch.load("../checkpoints/robotcar/ckpt0_unormalize_gnloss_1e-7_gnloss11_gnlambda01_marginpos01.pth.tar")['model_state_dict']
+        self._vgg16fmap = VGG16FeatureMap()
+        ckpt = torch.load(vgg16fmap_ckpt)['model_state_dict']
         ckpt = OrderedDict((k.replace('embedding_net._model', '_model'), v)
                for k, v in ckpt.items())
-        self._s2dmodel.load_state_dict(ckpt)
-        self._s2dmodel.to(self._device)
-        self._s2dmodel.eval()
+        self._vgg16fmap.load_state_dict(ckpt)
+        self._vgg16fmap.to(self._device)
+        self._vgg16fmap.eval()
         print("load finetuned vgg net for s2d")
 
     def _build_model(self):
@@ -145,7 +146,7 @@ class ImageRetrievalModel():
             # print(list(self._s2dmodel.children())[0])
             # print(len(list(self._s2dmodel.children())[0]))
             
-            for i, layer in enumerate(list(self._s2dmodel.children())[0]):
+            for i, layer in enumerate(list(self._vgg16fmap.children())[0]):
                 if(j==len(self._hypercolumn_layers)):
                     break
                 if(i==self._hypercolumn_layers[j]):

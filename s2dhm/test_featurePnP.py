@@ -1,49 +1,32 @@
 import torch
 import numpy as np
 from torch import nn
-
-from featurePnP.utils import (to_homogeneous, from_homogeneous, batched_eye_like,
-                    skew_symmetric, so3exp_map, sobel_filter, np_gradient_filter)
-# from featurePnP.losses import scaled_loss, squared_loss, pose_error, pose_error_np
-from featurePnP.losses import *
-from featurePnP.optimization import FeaturePnP
 import scipy
+from scipy import io
 import imageio
 from scipy.ndimage import gaussian_filter
 from matplotlib import pyplot as plt
-from scipy import io
-from visualization import plot_correspondences
-from pose_prediction import keypoint_association
 import gin
-from network import network
 import os
-from pose_prediction import predictor
+from PIL import Image
+from tqdm import tqdm
+from functools import partial
+import argparse
+
+from featurePnP.utils import to_homogeneous, from_homogeneous, batched_eye_like, skew_symmetric, so3exp_map, sobel_filter, np_gradient_filter
+from featurePnP.losses import scaled_loss, squared_loss, huber_loss, barron_loss, pose_error, pose_error_np, pose_error_mat
+from featurePnP.optimization import FeaturePnP
+from visualization import plot_correspondences
+from network import network
 from datasets import base_dataset
 from datasets.cmu_dataset import ExtendedCMUDataset
+from pose_prediction import predictor, keypoint_association, exhaustive_search, solve_pnp
 from pose_prediction.sparse_to_dense_predictor import SparseToDensePredictor
 from pose_prediction.matrix_utils import quaternion_matrix
 from image_retrieval import rank_images
-from pose_prediction import exhaustive_search
-from PIL import Image
-from pose_prediction import solve_pnp
-from tqdm import tqdm
-from functools import partial
 
-@gin.configurable
-def get_dataset_loader(dataset_loader_cls):
-    return dataset_loader_cls
 
-@gin.configurable
-def get_pose_predictor(pose_predictor_cls: predictor.PosePredictor,
-                       dataset: base_dataset.BaseDataset,
-                       network: network.ImageRetrievalModel,
-                       ranks: np.ndarray,
-                       log_images: bool):
-    return pose_predictor_cls(dataset=dataset,
-                              network=network,
-                              ranks=ranks,
-                              log_images=log_images)
-
+# used for create struct for fPnP
 class dotdict(dict):
     """dot.notation access to dictionary attributes"""
     __getattr__ = dict.get
@@ -72,7 +55,7 @@ def keypoints2example(img_idx0):
     # print(new_img.shape)
     return torch.from_numpy(new_img.transpose((2,0,1)) * 255)[None, ...]
 
-
+# test on toy example for verification of fPnP
 def test_toy_example():
     model = FeaturePnP(iterations=50, device=torch.device('cuda:0'), loss_fn=squared_loss, init_lambda=0.1, verbose=True)
 
@@ -97,7 +80,6 @@ def test_toy_example():
     R_gt = torch.from_numpy(relative_pose[:3, :3]).type(torch.float32)
     t_gt = torch.from_numpy(relative_pose[:3, 3]).type(torch.float32)
             
-
     K = np.array([[420.506712, 0.        ,  355.208298],
                   [0.        , 420.610940,  250.336787],
                   [0.        , 0.        ,  1.]])
@@ -201,6 +183,23 @@ def test_toy_example():
     print("optimized random pose error")
     print(pose_error(R_opt_rnd, t_opt_rnd, R_gt, t_gt))
 
+
+# helper functions from run.py
+@gin.configurable
+def get_dataset_loader(dataset_loader_cls):
+    return dataset_loader_cls
+
+@gin.configurable
+def get_pose_predictor(pose_predictor_cls: predictor.PosePredictor,
+                       dataset: base_dataset.BaseDataset,
+                       network: network.ImageRetrievalModel,
+                       ranks: np.ndarray,
+                       log_images: bool):
+    return pose_predictor_cls(dataset=dataset,
+                              network=network,
+                              ranks=ranks,
+                              log_images=log_images)
+
 def bind_cmu_parameters(cmu_slice, mode):
     """Update CMU gin parameters to match chosen slice."""
     gin.bind_parameter('ExtendedCMUDataset.cmu_slice', cmu_slice)
@@ -224,12 +223,16 @@ def bind_cmu_parameters(cmu_slice, mode):
         gin.bind_parameter('plot_correspondences.plot_image_retrieval.export_folder',
             '../logs/sparse_to_dense/nearest_neighbor/cmu/slice_{}/'.format(cmu_slice)),
 
+# test on a subset of reference images in robotcar for local parameter tuning
 def test_robotcar_images():
-    robotcar_root = ""
     device = torch.device('cuda' if torch.cuda.is_available() else "cpu")
     gin.parse_config_file("configs/runs/run_sparse_to_dense_on_robotcar.gin")
     dataset = get_dataset_loader()
-    dataset.data['query_image_names'] = dataset.data['reference_image_names'][:100]
+    # random select 500 images for local validation
+    np.random.seed(0)
+    idxs = np.random.choice(len(dataset.data['reference_image_names']), 500, replace=False)
+    # print(idxs)
+    dataset.data['query_image_names'] = [dataset.data['reference_image_names'][idx] for idx in idxs]
     net = network.ImageRetrievalModel(device=device)
     ranks = rank_images.fetch_or_compute_ranks(dataset, net).T
 
@@ -247,7 +250,7 @@ def test_robotcar_images():
 
     use_sobel = False
     loss_fn = huber_loss 
-    out_fname = "results/vgg_urban_1e-5_0.5"
+    out_fname = "results/vgg_robotcar_contrastive_only_ckpt0"
     fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=loss_fn, init_lambda=0.01, verbose=False)
     for i, query_image in tqdm(enumerate(dataset.data['query_image_names']), total=num_images):
         query_idx = dataset.data['query_image_names'].index(query_image)
@@ -381,7 +384,7 @@ def test_cmu_images():
     # print(query_image)
     # dataset.data['query_image_names'] = [query_image]
     # dataset.data['query_image_names'] = dataset.data['reference_image_names']
-    dataset.data['query_image_names'] = dataset.data['reference_image_names'][:100]
+    dataset.data['query_image_names'] = dataset.data['reference_image_names']
     net = network.ImageRetrievalModel(device=device)
     ranks = rank_images.fetch_or_compute_ranks(dataset, net).T
 
@@ -522,5 +525,7 @@ def test_cmu_images():
 
     
 if __name__ == "__main__":
-    test_cmu_images()
-    # test_robotcar_images()
+    parser = argparse.ArgumentParser()
+    
+    # test_cmu_images()
+    test_robotcar_images()
