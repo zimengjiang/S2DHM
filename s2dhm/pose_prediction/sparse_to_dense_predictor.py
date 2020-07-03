@@ -105,7 +105,9 @@ class SparseToDensePredictor(predictor.PosePredictor):
                     local_reconstruction.points_3D[mask], (-1, 1, 3))
                 distortion_coefficients = \
                     local_reconstruction.distortion_coefficients
-                intrinsics = local_reconstruction.intrinsics
+                # bug in the original repo: should use query image's intrinsics
+                # intrinsics = local_reconstruction.intrinsics
+                intrinsics = self._filename_to_intrinsics[query_image]
                 prediction = solve_pnp.solve_pnp(
                     points_2D=points_2D,
                     points_3D=points_3D,
@@ -135,7 +137,8 @@ class SparseToDensePredictor(predictor.PosePredictor):
                             mask=mask,
                             query_dense_hypercolumn=query_dense_hypercolumn_copy,
                             reference_dense_hypercolumn=reference_dense_hypercolumns,
-                            query_intrinsics=local_reconstruction.intrinsics,
+                            # query_intrinsics=local_reconstruction.intrinsics,
+                            query_intrinsics=intrinsics,
                             size_ratio=cell_size[0],
                             points_2D=matches_2D[mask].cuda(),
                             R_gt=None,

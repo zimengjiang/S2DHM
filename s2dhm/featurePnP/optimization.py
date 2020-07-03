@@ -58,34 +58,34 @@ class FeaturePnP(nn.Module):
         # TODO: take distCoeffs into account using cv2.undistortPoints
         with torch.no_grad():
             q_matrix = torch.FloatTensor(query_prediction.matrix).to(self.device)
-            q_matrix_inv = q_matrix.inverse()
             r_matrix = torch.FloatTensor(reference_prediction.matrix).to(self.device)
             r_matrix_inv = r_matrix.inverse()
 
-            # pts0 = r_matrix * 3D
-            # pts1 = q_matrix * 3D
             # from pts0 to pts1: q_matrix @ r_matrix_inv
             relative_matrix = q_matrix @ r_matrix_inv
-            # relative_matrix = q_matrix_inv @ r_matrix
 
             R_init = relative_matrix[:3, :3]
             t_init = relative_matrix[:3, 3]
             imgf0 = reference_dense_hypercolumn
             imgf1 = query_dense_hypercolumn
+            # determine which filter for calculating numerical image gradient
+            # empirically the 2nd order center difference (np_gradient_filter) works better 
             if use_sobel:
                 imgf1_gx, imgf1_gy = sobel_filter(imgf1) 
             else:
                 imgf1_gx, imgf1_gy = np_gradient_filter(imgf1) 
+            # remove batch dimension since it is always 1
             imgf1_gx = imgf1_gx.squeeze()
             imgf1_gy = imgf1_gy.squeeze()
             imgf0 = imgf0.squeeze()
             imgf1 = imgf1.squeeze()
+
+            # 0 refers to the reference image and 1 refers to the query image
             K0 = torch.FloatTensor(local_reconstruction.intrinsics).to(self.device)
             K1 = torch.FloatTensor(query_intrinsics).to(self.device)
 
             lambda_ = self.lambda_
 
-            # 0 is reference image, 1 is query image
             # already in screen coordinates
             pts_2d_0 = torch.FloatTensor(local_reconstruction.points_2D[mask]).to(self.device) # N x 2  
             img0_idx = torch.floor(pts_2d_0 / size_ratio).type(torch.LongTensor)
