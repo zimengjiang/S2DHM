@@ -200,10 +200,11 @@ class FeaturePnP(nn.Module):
             self.update_prediction(
                 pts_3D = local_reconstruction.points_3D[mask],
                 # pts_2D = torch.round(pts_2d_1),
-                # pts_2D = points_2D, 
+                s2d_pts_2D = points_2D, 
+                fpnp_pts_2D = torch.round(best_pts_2d_1),
                 # bug fix: here should use updated 2d keypoints in the query image
                 # pts_2D = torch.round(best_pts_2d_1).type(torch.LongTensor).cpu().numpy(),
-                pts_2D = torch.round(best_pts_2d_1),
+                # pts_2D = torch.round(best_pts_2d_1),
                 pose = self.relative_to_abs_pose(R, t, r_matrix),
                 prediction = query_prediction,
                 reference_pts_2D = local_reconstruction.points_2D[mask],
@@ -222,17 +223,17 @@ class FeaturePnP(nn.Module):
         return abs_pose
 
 
-    def update_prediction(self, pts_3D, pts_2D, pose, prediction, reference_pts_2D, query_intrinsics, reprojectionThres=12.0):
+    def update_prediction(self, pts_3D, s2d_pts_2D, fpnp_pts_2D, pose, prediction, reference_pts_2D, query_intrinsics, reprojectionThres=12.0):
         # points_3D_proj = np.round(from_homogeneous(from_homogeneous(to_homogeneous(points_3D)  @ prediction.matrix.T) @ local_reconstruction.intrinsics.T))
         # pts_3D_proj = from_homogeneous(to_homogeneous(torch.from_numpy(pts_3D.astype(np.float32))).cuda() @ pose.T)
         pts_3D_cuda = torch.from_numpy(pts_3D.astype(np.float32)).cuda()
         pts_3D_proj = from_homogeneous(from_homogeneous(to_homogeneous(pts_3D_cuda) @ pose.T) @ query_intrinsics.T)
-        dist = torch.sum(torch.pow(pts_3D_proj - pts_2D, 2), axis=-1)
+        dist = torch.sum(torch.pow(pts_3D_proj - s2d_pts_2D, 2), axis=-1)
         # print(pts_3D_proj.cpu().numpy(), pts_2D)
         inliers = (dist < reprojectionThres * reprojectionThres).cpu().numpy()
         prediction.num_inliers = np.sum(inliers)
         prediction.reference_inliers = reference_pts_2D[inliers]
-        prediction.query_inliers = pts_2D[inliers]
+        prediction.query_inliers = fpnp_pts_2D[inliers]
         prediction.quaternion = matrix_quaternion(pose.cpu().numpy()) 
         prediction.matrix = pose.cpu().numpy()
         return
