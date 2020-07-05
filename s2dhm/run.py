@@ -85,7 +85,7 @@ def main(args):
     # Create dataset loader
     dataset = get_dataset_loader()
     # for fast testing the pipeline
-    # dataset.data['query_image_names'] = dataset.data['query_image_names'][:5]
+    dataset.data['query_image_names'] = dataset.data['query_image_names'][:5]
 
     # Load retrieval model and initialize pose predictor
     net = network.ImageRetrievalModel(device=device)

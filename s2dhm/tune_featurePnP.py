@@ -1,7 +1,8 @@
 import os
 
 
-grad_filters = ['np', 'sobel']
+# grad_filters = ['np', 'sobel']
+grad_filters = ['np']
 loss_fns = ['sq', 'cauchy', 'gm', 'huber']
 
 for loss_fn in loss_fns:

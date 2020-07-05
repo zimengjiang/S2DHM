@@ -102,8 +102,9 @@ class FeaturePnP(nn.Module):
             R = R_init
             t = t_init
 
-            # for us this should be one for all points since we have no idea which keypoint is more important
-            scale = torch.ones((pts_2d_0.shape[0],)).type(torch.FloatTensor).to(self.device)
+            # for us this should be the same for all points since we have no idea which keypoint is more important
+            # use a scale so that it makes a difference using different loss functions 
+            scale = 0.4 * torch.ones((pts_2d_0.shape[0],)).type(torch.FloatTensor).to(self.device)
             for i in range(self.iterations):
                 pts_3d_1 = pts_3d_0 @ R.T + t
                 pts_2d_1 = from_homogeneous(pts_3d_1 @ K1.T)
@@ -120,6 +121,10 @@ class FeaturePnP(nn.Module):
 
                 error = extracted_feat1 - extracted_feat0
                 cost = (error**2).sum(-1)
+                # print(cost.mean())
+                # print(cost.max())
+                # print(cost.min())
+                # print(cost.median())
                 cost, weights, _ = scaled_loss(cost, self.loss_fn, scale)
                 if i == 0:
                     prev_cost = cost.mean(-1)
