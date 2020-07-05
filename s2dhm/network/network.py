@@ -23,7 +23,7 @@ class ImageRetrievalModel():
     """
     def __init__(self, num_clusters: int, encoder_dim: int,
                 checkpoint_path: str, hypercolumn_layers: List[int], device,
-                vgg16fmap_ckpt: str="../checkpoints/robotcar/ckpt0_unormalize_gnloss_1e-7_gnloss11_gnlambda01_marginpos01.pth.tar"):
+                vgg16fmap_ckpt: str):
         """Initialize the Image Retrieval Network.
 
         Args:
@@ -48,7 +48,6 @@ class ImageRetrievalModel():
         self._vgg16fmap.load_state_dict(ckpt)
         self._vgg16fmap.to(self._device)
         self._vgg16fmap.eval()
-        print("load finetuned vgg net for s2d")
 
     def _build_model(self):
         """ Build image retrieval network and load pre-trained weights.

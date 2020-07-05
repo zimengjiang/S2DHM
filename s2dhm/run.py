@@ -22,6 +22,8 @@ parser.add_argument(
     default='sparse_to_dense')
 parser.add_argument('--log_images', action='store_true')
 parser.add_argument('--cmu_slice', type=int, default=2)
+parser.add_argument('--out_fname', type=str, default="../results/robotcar/s2d.txt")
+parser.add_argument('--vgg_ckpt', type=str, default="../checkpoints/robotcar/retrieval.pth.tar")
 
 @gin.configurable
 def get_dataset_loader(dataset_loader_cls):
@@ -77,8 +79,13 @@ def main(args):
     if args.dataset=='cmu':
         bind_cmu_parameters(args.cmu_slice, args.mode)
 
+    gin.bind_parameter("SparseToDensePredictor.output_filename", args.out_fname)
+    gin.bind_parameter("ImageRetrievalModel.vgg16fmap_ckpt", args.vgg_ckpt)
+
     # Create dataset loader
     dataset = get_dataset_loader()
+    # for fast testing the pipeline
+    # dataset.data['query_image_names'] = dataset.data['query_image_names'][:5]
 
     # Load retrieval model and initialize pose predictor
     net = network.ImageRetrievalModel(device=device)
@@ -92,6 +99,7 @@ def main(args):
                                         network=net,
                                         ranks=ranks,
                                         log_images=args.log_images)
+
     pose_predictor.save(pose_predictor.run())
 
 if __name__ == '__main__':

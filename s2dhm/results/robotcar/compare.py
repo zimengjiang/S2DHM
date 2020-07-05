@@ -51,8 +51,8 @@ def calculate_stats(array_dict):
 
 if __name__ == "__main__":
 
-    fnames = [fname for fname in os.listdir("./") if ".npy" in fname]
-    # print(fnames)
+    fnames = [fname for fname in os.listdir("./") if ".npy" in fname and '_np' in fname]
+    print(fnames)
 
     # for fname in fnames:
     #     array_dict = np.load(fname)[()]

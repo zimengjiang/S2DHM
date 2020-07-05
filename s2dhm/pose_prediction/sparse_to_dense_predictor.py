@@ -7,6 +7,7 @@ from PIL import Image
 from tqdm import tqdm
 import pandas as pd
 from pathlib import Path
+from functools import partial
 
 from pose_prediction import predictor
 from pose_prediction import solve_pnp
@@ -14,7 +15,7 @@ from pose_prediction import keypoint_association
 from pose_prediction import exhaustive_search
 from visualization import plot_correspondences
 from featurePnP.optimization import FeaturePnP
-from featurePnP.losses import huber_loss
+from featurePnP.losses import huber_loss, barron_loss
 
 
 @gin.configurable
@@ -36,7 +37,9 @@ class SparseToDensePredictor(predictor.PosePredictor):
             self._dataset.data['filename_to_intrinsics']
         self._filename_to_local_reconstruction = \
             self._dataset.data['filename_to_local_reconstruction']
-        self._fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=huber_loss, init_lambda=0.01, verbose=False)
+        loss_fn = partial(barron_loss, alpha=-2*torch.ones((1)).cuda()) #  Geman-McClure loss
+        loss_fn = huber_loss
+        self._fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=loss_fn, init_lambda=0.01, verbose=False)
         self._use_fPnP = True
         
 
@@ -183,10 +186,10 @@ class SparseToDensePredictor(predictor.PosePredictor):
                     "[{} inliers]".format(best_prediction.num_inliers))
                 tqdm_bar.refresh()
 
-        print('>> Saving rpnp predictions under {}'.format(self._output_filename+'_rpnp'))
-        Path(self._output_filename+'_rpnp').parent.mkdir(exist_ok=True, parents=True)
-        df = pd.DataFrame(np.array(predictions))
-        df.to_csv(self._output_filename+'_rpnp', sep=' ', header=None, index=None)
+        print('>> Saving rpnp predictions under {}'.format(self._output_filename[:-4]+'_rpnp.txt'))
+        Path(self._output_filename[:-4]+'_rpnp.txt').parent.mkdir(exist_ok=True, parents=True)
+        df = pd.DataFrame(np.array(rpnp_output))
+        df.to_csv(self._output_filename[:-4]+'_rpnp.txt', sep=' ', header=None, index=None)
         return output
 
     @property
