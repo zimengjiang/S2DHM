@@ -1,8 +1,7 @@
 data
 **/__pycache__
 .vscode/
-*/results/*.npy
-*/results/*/*.npy
+*/results/**/*.npy
 checkpoints/gnnet/
 checkpoints/vgg/
 checkpoints/robotcar/
