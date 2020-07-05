@@ -38,7 +38,7 @@ class SparseToDensePredictor(predictor.PosePredictor):
         self._filename_to_local_reconstruction = \
             self._dataset.data['filename_to_local_reconstruction']
         loss_fn = partial(barron_loss, alpha=-2*torch.ones((1)).cuda()) #  Geman-McClure loss
-        loss_fn = huber_loss
+        # loss_fn = huber_loss
         self._fPnP = FeaturePnP(iterations=1000, device=torch.device('cuda'), loss_fn=loss_fn, init_lambda=0.01, verbose=False)
         self._use_fPnP = True
         
