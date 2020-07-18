@@ -277,6 +277,7 @@ def test_on_real_images(args):
         channels, width, height = query_dense_hypercolumn.shape[1:]
         query_dense_hypercolumn_copy = query_dense_hypercolumn.clone().detach()
         query_dense_hypercolumn = query_dense_hypercolumn.squeeze().view((channels, -1))
+        print(query_dense_hypercolumn_copy.shape)
 
         query_local_reconstruction = dataset.data['filename_to_local_reconstruction'][query_image]
         ground_truth = solve_pnp.solve_pnp(
