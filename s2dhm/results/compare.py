@@ -55,10 +55,25 @@ def calculate_stats(array_dict, fname):
 
 def write_to_csv(fname, all_stats):
     with open(fname, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(stats_keys)
+        writer = csv.writer(f, lineterminator='\\\\ \n', delimiter='&', quoting=csv.QUOTE_NONE, quotechar='', escapechar='\\')
+        header = [key.replace('_', '') for key in stats_keys]
+        print(header)
+        writer.writerow(header)
         for stats in all_stats:
-            writer.writerow([stats[key] for key in stats_keys])
+            row = []
+            for key in stats_keys:
+                if 'prec' in key:
+                    row.append("{:.1f}".format(stats[key]*100))
+                elif 'error' in key:
+                    row.append("{:.3f}".format(stats[key]))
+                elif 'num_inliers' in key:
+                    row.append("{:.1f}".format(stats[key]))
+                elif 'retrieval' in stats[key]:
+                    row.append(stats[key][10:-4].replace('_', ' '))
+                else:
+                    row.append(stats[key])
+                row[-1] += '\t'
+            writer.writerow(row)
 
 
 if __name__ == "__main__":
