@@ -75,12 +75,13 @@ def main(args):
     gin.parse_config_file(
         'configs/runs/run_{}_on_{}.gin'.format(args.mode, args.dataset))
 
+    gin.bind_parameter("SparseToDensePredictor.output_filename", args.out_fname)
+    gin.bind_parameter("ImageRetrievalModel.vgg16fmap_ckpt", args.vgg_ckpt)
+
     # For CMU, pick a slice
     if args.dataset=='cmu':
         bind_cmu_parameters(args.cmu_slice, args.mode)
 
-    gin.bind_parameter("SparseToDensePredictor.output_filename", args.out_fname)
-    gin.bind_parameter("ImageRetrievalModel.vgg16fmap_ckpt", args.vgg_ckpt)
 
     # Create dataset loader
     dataset = get_dataset_loader()
