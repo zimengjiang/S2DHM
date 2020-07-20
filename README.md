@@ -17,7 +17,8 @@ This is a fork of the orginal S2DHM repo where most code are kept intact. My imp
 git clone https://github.com/zimengjiang/S2DHM.git
 cd S2DHM
 git checkout vgg
-conda env create -f environment.yml 
+conda env create -f environment.yml
+conda activate s2d
 
 # properly setup data following the directory structure of the as below.
 ${S2DHM}
@@ -32,3 +33,20 @@ ${S2DHM}
 │   ├── triangulation/
 │       ├── *.npy
 ```
+
+## Running
+```
+conda activate s2d
+cd s2dhm
+sh retrieavl_robotcar.sh
+```
+The `retrieval_robotcar.sh` and `robotcar.sh` demonstrate how to run the S2DHM+FeaturePnP pipeline locally. The `cmu.sh` is an example of running on the leonhard server.
+
+When the process is done, we can find results under `S2DHM/results/` as specified in the `S2DHM/s2dhm/configs/runs/run_sparse_to_dense_on_*.gin` config file. There will be two files, one with `_rpnp` suffix (RANSAC-PnP result) and one without (Feature-PnP result).
+
+## Results
+
+Part of results of evaluation on the whole dataset are saved under `S2DHM/results`. Results of local validation are saved under `S2DHM/s2dhm/results/`.
+
+## Unresolved bugs
+See report's appendix or [this issue](https://github.com/germain-hug/S2DHM/issues/6)
