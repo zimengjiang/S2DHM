@@ -10,7 +10,7 @@ Based on S2DHM,the RANSAC-PnP pose is further fed into our Feature-metric PnPmod
 
 
 ## Code contribution
-This is a fork of the orginal S2DHM repo where most code are kept intact. My implementation of Feature-PnP is located in `s2dhm/featurePnP`, which builds on the Deep3DV codebase of Paul-Edouard Sarlin. My implementation of local validation is located in `s2dhm/test_featurePnP` where you can find code for evaulating Feature-PnP on toy examples(interface deprecated, but you can see how toy examples are created), as well as the real-life images in the RobotCar/CMU dataset. 
+This is a fork of the orginal S2DHM repo where most code are kept intact. My implementation of Feature-PnP is located in `s2dhm/featurePnP`, which builds on the Deep3DV codebase of Paul-Edouard Sarlin. My implementation of local validation is located in `s2dhm/test_featurePnP.py` and `s2dhm/tune_featurePnP.py` where you can find code for evaulating Feature-PnP on toy examples (api interface deprecated, but you can see how toy examples are created), as well as the real-life images in the RobotCar/CMU dataset. 
 
 ## Environment Setup
 ```bash
@@ -42,7 +42,7 @@ sh retrieavl_robotcar.sh
 ```
 The `retrieval_robotcar.sh` and `robotcar.sh` demonstrate how to run the S2DHM+FeaturePnP pipeline locally. The `cmu.sh` is an example of running on the leonhard server.
 
-When the process is done, we can find results under `S2DHM/results/` as specified in the `S2DHM/s2dhm/configs/runs/run_sparse_to_dense_on_*.gin` config file. There will be two files, one with `_rpnp` suffix (RANSAC-PnP result) and one without (Feature-PnP result).
+Once the evaluation is finished, you can find results under `S2DHM/results/` as specified in the `S2DHM/s2dhm/configs/runs/run_sparse_to_dense_on_*.gin` config file. There will be two files, one with `_rpnp` suffix (RANSAC-PnP result) and one without (Feature-PnP result).
 
 ## Results
 
